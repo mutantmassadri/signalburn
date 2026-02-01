@@ -222,7 +222,7 @@
     <div class="stage" id="stage">
         <div class="stars" id="starfield"></div>
         
-        <svg id="render-target" viewBox="-200 -200 1400 1400" xmlns="http://www.w3.org/2000/svg">
+        <svg id="render-target" viewBox="-400 -400 1800 1800" xmlns="http://www.w3.org/2000/svg">
             <defs>
                 <clipPath id="planet-clip">
                     <circle cx="500" cy="500" r="450" />
@@ -306,8 +306,8 @@
                 <div class="data-row"><span class="data-lbl">Range:</span> <span class="data-val" id="val-climate">--</span></div>
                 <div class="data-row"><span class="data-lbl">Surface:</span> <span class="data-val" id="val-solid">--</span></div>
                 <div class="data-row"><span class="data-lbl">Fluid:</span> <span class="data-val" id="val-liquid">--</span></div>
-                <div class="data-row"><span class="data-lbl">Atmos:</span> <span class="data-val" id="val-atmos">--</span></div>
-                <div class="data-row"><span class="data-lbl">Biology:</span> <span class="data-val tag-dead" id="val-life">DEAD</span></div>
+                <div class="data-row"><span class="data-lbl">Atmosphere:</span> <span class="data-val" id="val-atmos">--</span></div>
+                <div class="data-row"><span class="data-lbl">Biology:</span> <span class="data-val tag-dead" id="val-life">NONE DETECTED</span></div>
             </div>
 
             <div>
@@ -368,30 +368,24 @@
 
 // --- 1. REFINED DATABASES ---
 const LIQUIDS = [
-    { name: "Water",       color: "#3b82f6", freeze: 0,    boil: 100,  tag: "C",  cloud: "#ffffff", frozenColor: "#e0f2fe", type: "standard" },
-    { name: "Salt Water",  color: "#2563eb", freeze: -2,   boil: 102,  tag: "C",  cloud: "#f1f5f9", frozenColor: "#bfdbfe", type: "standard" },
-    { name: "Heavy Water", color: "#60a5fa", freeze: 3.8,  boil: 101,  tag: "C",  cloud: "#e0f2fe", frozenColor: "#93c5fd", type: "standard" },
-    { name: "Peroxide",    color: "#7dd3fc", freeze: -0.4, boil: 150,  tag: "O",  cloud: "#e0f2fe", frozenColor: "#e0f2fe", type: "standard" },
-    { name: "Vinegar",     color: "#fde047", freeze: -2,   boil: 118,  tag: "C",  cloud: "#fef9c3", frozenColor: "#facc15", type: "acid" },
-    { name: "Brine",       color: "#0284c7", freeze: -21,  boil: 108,  tag: "C",  cloud: "#f0f9ff", frozenColor: "#bae6fd", type: "standard" },
-    { name: "Methane",     color: "#38bdf8", freeze: -182, boil: -161, tag: "C",  cloud: "#bae6fd", frozenColor: "#bae6fd", type: "volatile" },
-    { name: "Ethane",      color: "#0ea5e9", freeze: -183, boil: -88,  tag: "C",  cloud: "#e0f2fe", frozenColor: "#7dd3fc", type: "volatile" },
-    { name: "Nitrogen",    color: "#60a5fa", freeze: -210, boil: -195, tag: "N",  cloud: "#f1f5f9", frozenColor: "#93c5fd", type: "volatile" },
-    { name: "Oxygen",      color: "#93c5fd", freeze: -218, boil: -183, tag: "O",  cloud: "#bfdbfe", frozenColor: "#c4b5fd", type: "volatile" },
-    { name: "Sulfuric Acid", color: "#facc15", freeze: 10,  boil: 337,  tag: "S",  cloud: "#fef08a", frozenColor: "#eab308", type: "acid" },
-    { name: "Nitric Acid",   color: "#fb7185", freeze: -42, boil: 83,   tag: "N",  cloud: "#fca5a5", frozenColor: "#f43f5e", type: "acid" },
-    { name: "Hydrochloric",  color: "#4ade80", freeze: -26, boil: 48,   tag: "Cl", cloud: "#dcfce7", frozenColor: "#22c55e", type: "acid" },
-    { name: "Cyanide",       color: "#22d3ee", freeze: -13, boil: 25,   tag: "C",  cloud: "#cffafe", frozenColor: "#06b6d4", type: "acid" },
-    { name: "Ammonia",       color: "#2dd4bf", freeze: -77,  boil: -33,  tag: "N",  cloud: "#ccfbf1", frozenColor: "#5eead4", type: "acid" },
-    { name: "Chlorine",      color: "#a3e635", freeze: -101, boil: -34,  tag: "Cl", cloud: "#d9f99d", frozenColor: "#84cc16", type: "acid" },
-    { name: "Lava",        color: "#ff4500", freeze: 700,  boil: 3000, tag: "Si", cloud: "#57534e", frozenColor: "#292524", type: "magma" },
-    { name: "Mercury",     color: "#cbd5e1", freeze: -39,  boil: 357,  tag: "Fe", cloud: "#e2e8f0", frozenColor: "#94a3b8", type: "metal" },
-    { name: "Gold",        color: "#fbbf24", freeze: 1064, boil: 2700, tag: "Fe", cloud: "#fde047", frozenColor: "#b45309", type: "metal" },
-    { name: "Iron",        color: "#ef4444", freeze: 1538, boil: 2862, tag: "Fe", cloud: "#fdba74", frozenColor: "#7c2d12", type: "metal" },
-    { name: "Plasma",      color: "#818cf8", freeze: 5000, boil: 99999,tag: "X",  cloud: "#c7d2fe", frozenColor: "#4f46e5", type: "exotic" },
-    { name: "Crude Oil",   color: "#020617", freeze: -57,  boil: 200,  tag: "C",  cloud: "#52525b", frozenColor: "#000000", type: "viscous" },
-    { name: "Blood",       color: "#dc2626", freeze: -2,   boil: 100,  tag: "Bio",cloud: "#fca5a5", frozenColor: "#991b1b", type: "organic" },
-    { name: "Slime",       color: "#86efac", freeze: 0,    boil: 110,  tag: "Bio",cloud: "#bbf7d0", frozenColor: "#22c55e", type: "organic" },
+    { name: "Water",       color: "#3b82f6", freeze: 0,    boil: 100,  tag: "C",  cloud: "#ffffff", frozenColor: "#e0f2fe", type: "standard", gas: "Water Vapor" },
+    { name: "Salt Water",  color: "#2563eb", freeze: -2,   boil: 102,  tag: "C",  cloud: "#f1f5f9", frozenColor: "#bfdbfe", type: "standard", gas: "Water Vapor" },
+    { name: "Heavy Water", color: "#60a5fa", freeze: 3.8,  boil: 101,  tag: "C",  cloud: "#e0f2fe", frozenColor: "#93c5fd", type: "standard", gas: "Deuterium" },
+    { name: "Peroxide",    color: "#7dd3fc", freeze: -0.4, boil: 150,  tag: "O",  cloud: "#e0f2fe", frozenColor: "#e0f2fe", type: "standard", gas: "Oxygen" },
+    { name: "Vinegar",     color: "#fde047", freeze: -2,   boil: 118,  tag: "C",  cloud: "#fef9c3", frozenColor: "#facc15", type: "acid",     gas: "Acetic Acid" },
+    { name: "Brine",       color: "#0284c7", freeze: -21,  boil: 108,  tag: "C",  cloud: "#f0f9ff", frozenColor: "#bae6fd", type: "standard", gas: "Chlorine" },
+    { name: "Methane",     color: "#38bdf8", freeze: -182, boil: -161, tag: "C",  cloud: "#bae6fd", frozenColor: "#bae6fd", type: "volatile", gas: "Methane" },
+    { name: "Ethane",      color: "#0ea5e9", freeze: -183, boil: -88,  tag: "C",  cloud: "#e0f2fe", frozenColor: "#7dd3fc", type: "volatile", gas: "Ethane" },
+    { name: "Nitrogen",    color: "#60a5fa", freeze: -210, boil: -195, tag: "N",  cloud: "#f1f5f9", frozenColor: "#93c5fd", type: "volatile", gas: "Nitrogen" },
+    { name: "Ammonia",     color: "#2dd4bf", freeze: -77,  boil: -33,  tag: "N",  cloud: "#ccfbf1", frozenColor: "#5eead4", type: "acid",     gas: "Ammonia" },
+    { name: "Chlorine",    color: "#a3e635", freeze: -101, boil: -34,  tag: "Cl", cloud: "#d9f99d", frozenColor: "#84cc16", type: "acid",     gas: "Chlorine Gas" },
+    { name: "Sulfuric Acid", color: "#facc15", freeze: 10,  boil: 337,  tag: "S",  cloud: "#fef08a", frozenColor: "#eab308", type: "acid",    gas: "Sulfur Dioxide" },
+    { name: "Nitric Acid",   color: "#fb7185", freeze: -42, boil: 83,   tag: "N",  cloud: "#fca5a5", frozenColor: "#f43f5e", type: "acid",    gas: "Nitrogen Dioxide" },
+    { name: "Lava",        color: "#ff4500", freeze: 700,  boil: 3000, tag: "Si", cloud: "#57534e", frozenColor: "#292524", type: "magma",    gas: "Silicate Vapor" },
+    { name: "Mercury",     color: "#cbd5e1", freeze: -39,  boil: 357,  tag: "Fe", cloud: "#e2e8f0", frozenColor: "#94a3b8", type: "metal",    gas: "Mercury Vapor" },
+    { name: "Crude Oil",   color: "#020617", freeze: -57,  boil: 200,  tag: "C",  cloud: "#52525b", frozenColor: "#000000", type: "viscous",  gas: "Petroleum Gas" },
+    { name: "Blood",       color: "#dc2626", freeze: -2,   boil: 100,  tag: "Bio",cloud: "#fca5a5", frozenColor: "#991b1b", type: "organic",  gas: "Iron Oxide" },
+    { name: "Slime",       color: "#86efac", freeze: 0,    boil: 110,  tag: "Bio",cloud: "#bbf7d0", frozenColor: "#22c55e", type: "organic",  gas: "Methane" },
 ];
 
 const SOLIDS = [
@@ -402,24 +396,17 @@ const SOLIDS = [
     { name: "Limestone",  color: "#e5e5e5", tag: "C",  roughness: 0.8, type: "rock", melt: 900 },
     { name: "Obsidian",   color: "#18181b", tag: "Si", roughness: 1.1, type: "glass", melt: 1000 },
     { name: "Pumice",     color: "#d4d4d8", tag: "Si", roughness: 1.5, type: "rock", melt: 1200 },
-    { name: "Quartz",     color: "#fce7f3", tag: "Si", roughness: 1.4, type: "crystal", melt: 1670 },
     { name: "Regolith",   color: "#737373", tag: "Si", roughness: 1.4, type: "dust", melt: 1200 },
     { name: "Slate",      color: "#475569", tag: "Si", roughness: 0.9, type: "rock", melt: 1200 },
     { name: "Marble",     color: "#f3f4f6", tag: "C",  roughness: 0.7, type: "rock", melt: 1200 },
-
     { name: "Water Ice",  color: "#e2e8f0", tag: "C",  roughness: 0.7, type: "ice", melt: 0 },
     { name: "Dry Ice",    color: "#eff6ff", tag: "C",  roughness: 0.4, type: "ice", melt: -78 },
     { name: "Blue Ice",   color: "#bfdbfe", tag: "C",  roughness: 0.9, type: "ice", melt: 0 },
     { name: "Methane Ice",color: "#7dd3fc", tag: "C",  roughness: 0.5, type: "ice", melt: -182 },
-
     { name: "Iron Ore",   color: "#b91c1c", tag: "Fe", roughness: 1.2, type: "metal", melt: 1538 },
-    { name: "Rust",       color: "#ea580c", tag: "Fe", roughness: 0.9, type: "metal", melt: 1500 },
-    { name: "Copper Ox",  color: "#34d399", tag: "Fe", roughness: 0.8, type: "metal", melt: 1085 },
     { name: "Gold Vein",  color: "#facc15", tag: "Fe", roughness: 1.0, type: "metal", melt: 1064 },
-    { name: "Cobalt",     color: "#1d4ed8", tag: "Fe", roughness: 1.1, type: "metal", melt: 1495 },
+    { name: "Copper Ox",  color: "#34d399", tag: "Fe", roughness: 0.8, type: "metal", melt: 1085 },
     { name: "Titanium",   color: "#94a3b8", tag: "Fe", roughness: 0.9, type: "metal", melt: 1668 },
-    
-    { name: "Flesh",      color: "#f472b6", tag: "Bio", roughness: 0.5, type: "organic", melt: 60 },
     { name: "Bone",       color: "#fef3c7", tag: "Bio", roughness: 0.9, type: "organic", melt: 200 }
 ];
 
@@ -550,116 +537,143 @@ function createLensDataURI(strength) {
 // --- 6. CORE LOGIC ---
 
 function generatePlanetData(rng) {
-    let baseTemp = Math.floor(rng() * 450 - 150); 
-    if (rng() > 0.90) baseTemp += rng() * 2000; 
-    if (rng() < 0.10) baseTemp -= 120; 
+    // 1. Temperature Generation
+    let baseTemp = Math.floor(rng() * 450 - 150);
+    if (rng() > 0.92) baseTemp += rng() * 2500; // Increased potential for very hot planets
+    if (rng() < 0.12) baseTemp -= 150; // Increased potential for very cold planets
 
-    const equatorOffset = Math.floor(rng() * 50 + 20); 
-    const poleOffset = Math.floor(rng() * 80 + 40); 
-    
+    const equatorOffset = Math.floor(rng() * 50 + 20);
+    const poleOffset = Math.floor(rng() * 80 + 40);
     const maxT = baseTemp + equatorOffset;
     const minT = baseTemp - poleOffset;
+
+    // Helper: Celsius to Kelvin for Ratio calculations
+    const CtoK = (c) => c + 273.15;
+    const baseK = CtoK(baseTemp);
+
+    // 2. Select Solid
+    // Filter out "Ice" types if the planet is too hot for them
+    const validSolids = SOLIDS.filter(s => {
+        if (s.type === 'ice' && baseTemp > s.melt) return false;
+        return true;
+    });
     
-    const validSolids = SOLIDS.filter(s => minT < (s.melt + 50));
-    
-    let solid;
-    let solidName;
-    if (validSolids.length === 0) {
-        solid = { name: "Magma Crust", color: "#331111", tag: "Si", roughness: 1.2, type: "rock" };
-        solidName = "Magma Crust";
-    } else {
-        solid = validSolids[Math.floor(rng() * validSolids.length)];
-        solidName = solid.name;
+    let solid = validSolids.length > 0
+        ? validSolids[Math.floor(rng() * validSolids.length)]
+        : { name: "Scorched Crust", color: "#1a0500", tag: "Si", roughness: 1.2, type: "rock", melt: 9999 };
+
+    // Solid State Logic
+    const solidMeltK = CtoK(solid.melt);
+    let solidName = solid.name;
+    // Check Molten State (Temperature > 300% Melting Point in Kelvin)
+    if (baseK > solidMeltK * 3) {
+        solidName = `Molten ${solid.name}`;
+        solid = { ...solid, color: artColor(solid.color, 25, 15, 5) };
     }
 
-    const validLiquids = LIQUIDS.filter(l => minT < l.boil);
-
+    // 3. Select Liquid (CRITICAL FIX)
+    // Create a list of liquids that are NOT frozen at the planet's base temperature.
+    const potentialLiquids = LIQUIDS.filter(l => baseTemp > l.freeze);
+    
     let liquid;
-    if (validLiquids.length === 0) {
-        liquid = { name: "Supercritical Vapor", color: "#555", freeze: 9999, boil: -9999, tag: "X", cloud: "#888", frozenColor: "#444", type: "gas" };
+    let oceanName;
+    let liquidState = "none"; // none, liquid, boiling, sediment
+    let cloudColor;
+    let atmosContribution = 0;
+
+    if (potentialLiquids.length > 0) {
+        // A liquid is possible, select one
+        liquid = potentialLiquids[Math.floor(rng() * potentialLiquids.length)];
+        oceanName = liquid.name;
+        cloudColor = liquid.cloud;
+        const liquidBoilK = CtoK(liquid.boil);
+
+        // Now check for boiling/sediment states, since we know it's not frozen.
+        if (baseK > liquidBoilK * 3) {
+            liquidState = "sediment";
+            oceanName = `${liquid.name} Sediment`;
+            liquid = { ...liquid, color: artColor(liquid.color, -40, -30), tag: "Dry" };
+            cloudColor = "#59544f"; // Dry dust clouds
+            atmosContribution = 0.8;
+        } else if (baseK > liquidBoilK) {
+            liquidState = "boiling";
+            oceanName = `Boiling ${liquid.name}`;
+            atmosContribution = 0.4;
+        } else {
+            liquidState = "liquid";
+            atmosContribution = 0.1; // Baseline for evaporation
+        }
     } else {
-        const compatibleLiquids = validLiquids.filter(l => {
-             if (solid.type === 'ice' && l.freeze > 0) return false; 
-             return true;
-        });
-        liquid = compatibleLiquids.length ? compatibleLiquids[Math.floor(rng() * compatibleLiquids.length)] : validLiquids[0];
+        // Planet is too cold for any available liquids
+        liquidState = "none";
+        oceanName = "None";
+        liquid = { name: "None", tag: "-", frozenColor: "#a1a1aa", cloud: "#a1a1aa" }; // Fallback object
+        cloudColor = "#a1a1aa";
     }
 
-    const getLatForTemp = (targetTemp) => {
-        if (maxT === minT) return 0.5;
-        return (maxT - targetTemp) / (maxT - minT);
-    };
+    // 4. Atmosphere Logic
+    let atmosName = "None";
+    let atmosDensity = 0;
 
-    const latBoil = getLatForTemp(liquid.boil);
-    const latFreeze = getLatForTemp(liquid.freeze);
-    
-    let oceanName = liquid.name;
-    if (liquid.type === "metal") {
-        if (maxT < liquid.freeze) oceanName = `Frozen ${liquid.name}`; 
-        else if (minT > liquid.freeze) oceanName = `Molten ${liquid.name}`;
+    if (rng() > 0.2) { // 80% chance of having some atmosphere
+        atmosDensity = rng() * 0.3; // Base random density
+        atmosDensity += atmosContribution;
+        atmosDensity = Math.max(0, Math.min(1, atmosDensity)); // Clamp
+
+        if (liquidState === "sediment") {
+            atmosDensity = 0.9 + (rng() * 0.1);
+            atmosName = `Dense Vaporized ${liquid.name}`;
+        } else if (atmosDensity < 0.05) {
+            atmosName = "Trace Gases";
+        } else {
+            const desc = atmosDensity > 0.7 ? "Dense" : atmosDensity > 0.35 ? "Moderate" : "Thin";
+            const gas = (liquid.gas && liquidState !== "none") ? liquid.gas : "Inert Mix";
+            atmosName = `${desc} ${gas}`;
+        }
+    } else {
+        atmosName = "Vacuum";
     }
 
+    // 5. Life Logic (Stricter Constraints)
     let hasLife = false;
     let lifeType = "None";
     let bioColor = null;
     let bioMinT = 0, bioMaxT = 0;
 
-    const isWaterLike = ["Water","Salt Water","Fresh Water","Brine"].includes(liquid.name);
-    
-    if (isWaterLike || liquid.tag === "C") {
-        const cMin = -15, cMax = 50;
-        if (maxT > cMin && minT < cMax) {
-            hasLife = true; 
-            lifeType = "Carbon-Based";
-            bioColor = "#10b981"; 
-            bioMinT = cMin; bioMaxT = cMax;
-            if(rng() > 0.7) bioColor = "#be123c"; 
-        }
-    }
-
-    if (!hasLife && (solid.tag === "Si" || liquid.tag === "Si") && maxT > 200) {
-        if (minT < 1000) {
-            hasLife = true;
-            lifeType = "Silicon-Based";
-            bioColor = "#9333ea"; 
+    // Life requires a liquid in its liquid (not boiling/sediment) state.
+    if (liquidState === "liquid") {
+        if (["Water", "Salt Water"].includes(liquid.name) && baseTemp > -15 && baseTemp < 60) {
+            hasLife = true; lifeType = "Carbon-Based"; bioColor = "#10b981";
+            bioMinT = -15; bioMaxT = 60;
+        } else if (baseTemp > 200 && baseTemp < 1000 && solid.tag === "Si") {
+            hasLife = true; lifeType = "Silicon-Based"; bioColor = "#9333ea";
             bioMinT = 200; bioMaxT = 1000;
         }
     }
 
-    let suggestedWater = Math.floor(rng() * 40 + 30);
-    if (hasLife) suggestedWater = Math.floor(rng() * 15 + 30);
+    // 6. Visual Params
+    const getLatForTemp = (t) => (maxT === minT) ? 0.5 : (maxT - t) / (maxT - minT);
+    let latBoil = getLatForTemp(liquid.boil || 9999);
+    let latFreeze = getLatForTemp(liquid.freeze || 9998);
 
-    let evapFactor = 0;
-    if (latBoil < 0) evapFactor = 1.0; 
-    else if (latBoil > 1) evapFactor = 0.0;
-    else evapFactor = 1.0 - latBoil;
+    if (liquidState === "sediment") latBoil = -2.0; // Visually covers the whole planet
 
-    let liquidFactor = 0;
-    const liquidStart = Math.max(0, Math.min(1, latBoil));
-    const liquidEnd = Math.max(0, Math.min(1, latFreeze));
-    liquidFactor = liquidEnd - liquidStart;
-
-    let atmosDensity = (evapFactor * 0.9) + (liquidFactor * 0.3);
-    let atmosName = "Trace";
-    if (atmosDensity > 0.8) atmosName = `Dense ${liquid.name} Vapor`;
-    else if (atmosDensity > 0.4) atmosName = `${liquid.name} Atmosphere`;
-    else if (atmosDensity > 0.1) atmosName = "Thin Atmosphere";
-    if (liquid.name === "Water" && atmosDensity > 0.2) atmosName = "Nitrogen-Oxygen";
-
-    let continentalScale = 0.5;
-    if (solid.type === "rock") continentalScale = 0.6;
-    if (solid.type === "crystal") continentalScale = 0.3;
+    let suggestedWater = (liquidState === "none" || liquidState === "sediment") ?
+        Math.floor(rng() * 15) :
+        Math.floor(rng() * 40 + 30);
+    if (hasLife) suggestedWater = Math.floor(rng() * 20 + 45);
 
     return {
         baseTemp, maxT, minT,
         solid, liquid,
         latBoil, latFreeze,
         oceanName, solidName,
-        atmosName, atmosDensity, cloudHex: liquid.cloud,
+        atmosName, atmosDensity,
+        cloudHex: cloudColor,
         hasLife, lifeType, bioColor, bioMinT, bioMaxT,
-        tilt: rng() * 30,
-        rings: rng() > 0.85,
-        baseFreq: 0.006 - (continentalScale * 0.0045),
+        tilt: rng() * 45, // Increased max tilt
+        rings: rng() < 0.10,
+        baseFreq: 0.006 - ((solid.roughness * 0.5) * 0.0045),
         suggestedWater,
         roughness: solid.roughness * (0.5 + rng())
     };
@@ -1316,32 +1330,96 @@ function generateClouds(rng, data) {
 }
 
 function generateRings(rng, data) {
-    const ringBase = data.solid.color;
-    for(let i=0; i<8; i++) {
-        const r = 600 + i * 20;
-        const ry = r * 0.25;
-        const arc = (s,e) => {
-            const rad=Math.PI/180;
-            const sx=500+r*Math.cos(e*rad), sy=500+ry*Math.sin(e*rad);
-            const ex=500+r*Math.cos(s*rad), ey=500+ry*Math.sin(s*rad);
-            return `M ${sx} ${sy} A ${r} ${ry} 0 0 0 ${ex} ${ey}`;
-        };
-        const width = rng()*8+2;
-        const opacity = rng() * 0.3 + 0.1;
-        const color = artColor(ringBase, (i%2===0?20:-20), -10, 0);
+    dom.gRingsBack.innerHTML = '';
+    dom.gRingsFront.innerHTML = '';
 
-        const back = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        back.setAttribute("d", arc(180, 360));
-        back.setAttribute("stroke", color);
-        back.setAttribute("fill", "none");
-        back.setAttribute("stroke-width", width);
-        back.setAttribute("opacity", opacity);
-        back.setAttribute("transform", `rotate(${data.tilt}, 500, 500)`);
-        dom.gRingsBack.appendChild(back);
+    // 1. Define Palette & Properties
+    const solidColor = data.solid.color;
+    const iceColor = data.liquid.frozenColor || "#e0f2fe";
+    const palette = [
+        solidColor,
+        iceColor,
+        artColor(solidColor, 15, -10),
+        artColor(iceColor, -15, 5)
+    ];
+
+    const perspective = 0.25 + rng() * 0.15; // How elliptical the rings appear
+    const systemTilt = data.tilt;
+
+    // 2. Define Ring Bands Structure (e.g., Saturn's A, B rings and Cassini Division)
+    const bands = [
+        { name: "B-Ring", start: 540, end: 650, density: 0.8, particles: 200 },
+        // This gap represents the Cassini Division
+        { name: "A-Ring", start: 670, end: 800, density: 0.5, particles: 200 },
+        { name: "F-Ring", start: 810, end: 825, density: 0.3, particles: 30 }
+    ];
+
+    const createArcPath = (radius, ry, startAngle, endAngle) => {
+        const rad = Math.PI / 180;
+        const sx = 500 + radius * Math.cos(endAngle * rad);
+        const sy = 500 + ry * Math.sin(endAngle * rad);
+        const ex = 500 + radius * Math.cos(startAngle * rad);
+        const ey = 500 + ry * Math.sin(startAngle * rad);
+        return `M ${sx} ${sy} A ${radius} ${ry} 0 0 0 ${ex} ${ey}`;
+    };
+
+    // 3. Generate Ringlets for each band
+    bands.forEach(band => {
+        for (let i = 0; i < band.particles; i++) {
+            const progress = rng();
+            const radius = band.start + progress * (band.end - band.start);
+            const ry = radius * perspective;
+
+            // Density waves using a sine function to create clumps
+            const wave = Math.sin(progress * Math.PI * (10 + rng() * 10));
+            const baseOpacity = (band.density * 0.3) * (0.5 + rng() * 0.5);
+            const finalOpacity = baseOpacity + wave * 0.1;
+            
+            if (finalOpacity < 0.04) continue;
+
+            const color = palette[Math.floor(rng() * palette.length)];
+            const width = 1 + rng() * 3.5;
+
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("stroke", color);
+            path.setAttribute("fill", "none");
+            path.setAttribute("stroke-width", width);
+            path.setAttribute("stroke-opacity", finalOpacity);
+            path.setAttribute("transform", `rotate(${systemTilt}, 500, 500)`);
+            
+            // Back half
+            const backPath = path.cloneNode();
+            backPath.setAttribute("d", createArcPath(radius, ry, 180, 360));
+            dom.gRingsBack.appendChild(backPath);
+
+            // Front half
+            const frontPath = path.cloneNode();
+            frontPath.setAttribute("d", createArcPath(radius, ry, 0, 180));
+            dom.gRingsFront.appendChild(frontPath);
+        }
+    });
+
+    // 4. Add a few distinct "Shepherd" ringlets or features
+    const specialFeatures = Math.floor(rng() * 3);
+    for (let i = 0; i < specialFeatures; i++) {
+        const randomBand = bands[Math.floor(rng() * bands.length)];
+        const radius = randomBand.start + rng() * (randomBand.end - randomBand.start);
+        const ry = radius * perspective;
         
-        const front = back.cloneNode();
-        front.setAttribute("d", arc(0, 180));
-        dom.gRingsFront.appendChild(front);
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("stroke", artColor(palette[1], 40, 10)); // A bright, distinct color
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke-width", 2 + rng() * 2);
+        path.setAttribute("stroke-opacity", 0.7 + rng() * 0.2);
+        path.setAttribute("transform", `rotate(${systemTilt}, 500, 500)`);
+
+        const backPath = path.cloneNode();
+        backPath.setAttribute("d", createArcPath(radius, ry, 180, 360));
+        dom.gRingsBack.appendChild(backPath);
+
+        const frontPath = path.cloneNode();
+        frontPath.setAttribute("d", createArcPath(radius, ry, 0, 180));
+        dom.gRingsFront.appendChild(frontPath);
     }
 }
 

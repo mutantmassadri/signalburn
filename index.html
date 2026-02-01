@@ -222,7 +222,7 @@
     <div class="stage" id="stage">
         <div class="stars" id="starfield"></div>
         
-        <svg id="render-target" viewBox="-400 -400 1800 1800" xmlns="http://www.w3.org/2000/svg">
+        <svg id="render-target" viewBox="-200 -200 1400 1400" xmlns="http://www.w3.org/2000/svg">
             <defs>
                 <clipPath id="planet-clip">
                     <circle cx="500" cy="500" r="450" />
@@ -302,8 +302,7 @@
         <div class="controls">
             
             <div class="data-panel" id="data-panel">
-                <div class="data-row"><span class="data-lbl">Avg Temp:</span> <span class="data-val" id="val-temp">--</span></div>
-                <div class="data-row"><span class="data-lbl">Range:</span> <span class="data-val" id="val-climate">--</span></div>
+                <div class="data-row"><span class="data-lbl">Temperature:</span> <span class="data-val" id="val-temp">--</span></div>
                 <div class="data-row"><span class="data-lbl">Surface:</span> <span class="data-val" id="val-solid">--</span></div>
                 <div class="data-row"><span class="data-lbl">Fluid:</span> <span class="data-val" id="val-liquid">--</span></div>
                 <div class="data-row"><span class="data-lbl">Atmosphere:</span> <span class="data-val" id="val-atmos">--</span></div>
@@ -539,7 +538,7 @@ function createLensDataURI(strength) {
 function generatePlanetData(rng) {
     // 1. Temperature Generation
     let baseTemp = Math.floor(rng() * 450 - 150);
-    if (rng() > 0.92) baseTemp += rng() * 2500; // Increased potential for very hot planets
+    if (rng() > 0.92) baseTemp += Math.floor(rng() * 4500); // Increased potential for very hot planets
     if (rng() < 0.12) baseTemp -= 150; // Increased potential for very cold planets
 
     const equatorOffset = Math.floor(rng() * 50 + 20);
@@ -708,9 +707,8 @@ function fullRebuild() {
     const palette = generatePalette(data);
 
     // UI
-    dom.valTemp.innerText = `${data.baseTemp}°C`;
-    dom.valClimate.innerText = `${data.minT}° / ${data.maxT}°`; 
-    dom.valLiquid.innerHTML = data.oceanName + getTagHtml(data.liquid.tag);
+    dom.valTemp.innerHTML = `${data.baseTemp}°C <span style="font-size: 0.8em; opacity: 0.7;">(<span style="color: #60a5fa">${data.minT}°</span> / <span style="color: #f87171">${data.maxT}°</span>)</span>`;
+	dom.valLiquid.innerHTML = data.oceanName + getTagHtml(data.liquid.tag);
     dom.valSolid.innerHTML = data.solidName + getTagHtml(data.solid.tag);
     dom.valAtmos.innerText = data.atmosName;
     
@@ -1332,6 +1330,40 @@ function generateClouds(rng, data) {
 function generateRings(rng, data) {
     dom.gRingsBack.innerHTML = '';
     dom.gRingsFront.innerHTML = '';
+
+    // --- VARIANT A: SIMPLE RINGS (80% Chance) ---
+    if (rng() > 0.2) {
+        const ringBase = data.solid.color;
+        for(let i=0; i<8; i++) {
+            const r = 600 + i * 20;
+            const ry = r * 0.25;
+            const arc = (s,e) => {
+                const rad=Math.PI/180;
+                const sx=500+r*Math.cos(e*rad), sy=500+ry*Math.sin(e*rad);
+                const ex=500+r*Math.cos(s*rad), ey=500+ry*Math.sin(s*rad);
+                return `M ${sx} ${sy} A ${r} ${ry} 0 0 0 ${ex} ${ey}`;
+            };
+            const width = rng()*8+2;
+            const opacity = rng() * 0.3 + 0.1;
+            const color = artColor(ringBase, (i%2===0?20:-20), -10, 0);
+
+            const back = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            back.setAttribute("d", arc(180, 360));
+            back.setAttribute("stroke", color);
+            back.setAttribute("fill", "none");
+            back.setAttribute("stroke-width", width);
+            back.setAttribute("opacity", opacity);
+            back.setAttribute("transform", `rotate(${data.tilt}, 500, 500)`);
+            dom.gRingsBack.appendChild(back);
+            
+            const front = back.cloneNode();
+            front.setAttribute("d", arc(0, 180));
+            dom.gRingsFront.appendChild(front);
+        }
+        return;
+    }
+
+    // --- VARIANT B: COMPLEX PARTICLE RINGS (20% Chance) ---
 
     // 1. Define Palette & Properties
     const solidColor = data.solid.color;

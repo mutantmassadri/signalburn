@@ -2,7 +2,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SB PLANETGEN V9.6 - CLOUD CLUSTERS</title>
+    <title>SB PLANETGEN V10.1 - SEAMLESS ROTATION</title>
     <style>
         /* --- CORE VISUALS --- */
         :root {
@@ -216,15 +216,6 @@
         }
 
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.4",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/"
-  }
-}
-</script>
 </head>
 <body>
 
@@ -233,62 +224,39 @@
         
         <svg id="render-target" viewBox="-200 -200 1400 1400" xmlns="http://www.w3.org/2000/svg">
             <defs>
-                <!-- Native SVG Lens Generation (Fixes iOS Canvas Crash) -->
-                <linearGradient id="grad-u">
-                    <stop offset="0%" stop-color="#000" />
-                    <stop offset="100%" stop-color="#f00" />
-                </linearGradient>
-                <linearGradient id="grad-v" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stop-color="#000" />
-                    <stop offset="100%" stop-color="#0f0" />
-                </linearGradient>
-                <radialGradient id="grad-center-mask">
-                    <stop offset="0%" stop-color="#fff" />
-                    <stop offset="100%" stop-color="#888" />
-                </radialGradient>
-                <mask id="lens-mask">
-                    <rect width="100%" height="100%" fill="url(#grad-center-mask)" />
-                </mask>
-                
-                <g id="lens-source">
-                    <rect width="100%" height="100%" fill="#808080" />
-                    <rect width="100%" height="100%" fill="url(#grad-u)" style="mix-blend-mode: screen" mask="url(#lens-mask)"/>
-                    <rect width="100%" height="100%" fill="url(#grad-v)" style="mix-blend-mode: screen" mask="url(#lens-mask)"/>
-                </g>
-
                 <clipPath id="planet-clip">
                     <circle cx="500" cy="500" r="450" />
                 </clipPath>
 
-                <filter id="geo-blur" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+                <filter id="geo-blur" x="-20%" y="-20%" width="140%" height="140%">
                     <feGaussianBlur stdDeviation="25" />
                 </filter>
 
-                <filter id="liquid-blur" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+                <filter id="liquid-blur" x="-20%" y="-20%" width="140%" height="140%">
                     <feGaussianBlur stdDeviation="1" />
                 </filter>
                 
-                <filter id="geo-warp" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+                <filter id="geo-warp" x="-20%" y="-20%" width="140%" height="140%">
                     <feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves="3" result="warpNoise"/>
                     <feDisplacementMap in2="warpNoise" in="SourceGraphic" scale="35" xChannelSelector="R" yChannelSelector="G"/>
                 </filter>
 
-                <filter id="zone-warp" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+                <filter id="zone-warp" x="-20%" y="-20%" width="140%" height="140%">
                      <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="4" seed="123" result="turb"/>
                      <feDisplacementMap in="SourceGraphic" in2="turb" scale="60" xChannelSelector="R" yChannelSelector="G"/>
                      <feGaussianBlur stdDeviation="10" />
                 </filter>
 
-                <filter id="ice-noise" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+                <filter id="ice-noise" x="-20%" y="-20%" width="140%" height="140%">
                      <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="4" seed="500" result="frost"/>
                      <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.4 0" />
                 </filter>
                 
-                <filter id="soft-atmos" color-interpolation-filters="sRGB">
+                <filter id="soft-atmos">
                     <feGaussianBlur stdDeviation="30" />
                 </filter>
 
-                <filter id="blur-shadow" color-interpolation-filters="sRGB">
+                <filter id="blur-shadow">
                     <feGaussianBlur stdDeviation="20" />
                 </filter>
             </defs>
@@ -299,17 +267,24 @@
 
             <g id="planet-sphere" clip-path="url(#planet-clip)">
                 
-                <g id="group-terrain"></g>
+                <!-- The Tilt Group rotates the axis of the planet -->
+                <g id="planet-axis-group">
+                    
+                    <!-- The Surface Rotator moves the textures horizontally -->
+                    <g id="planet-surface-rotator">
+                        <g id="group-terrain"></g>
+                        <g id="group-liquid"></g>
+                        <g id="group-ice" style="mix-blend-mode: normal;"></g>
+                        <g id="group-bio"></g>
+                        <g id="geo-structure-layer"></g> <!-- Vectors -->
+                    </g>
+                    
+                    <!-- Clouds are handled separately to allow for parallax if needed, but here they just rotate -->
+                    <g id="layer-clouds-rotator"></g>
 
-                <g id="group-liquid"></g>
-
-                <g id="group-ice" style="mix-blend-mode: normal;"></g>
-
-                <g id="group-bio"></g>
+                </g>
 
             </g>
-
-            <g id="layer-clouds" clip-path="url(#planet-clip)"></g>
 
             <circle id="atmos-glow" cx="500" cy="500" r="450" fill="url(#grad-atmos)" pointer-events="none" style="mix-blend-mode: screen;"/>
             <circle id="rim-light" cx="500" cy="500" r="448" fill="none" stroke="#fff" stroke-width="3" opacity="0.4" pointer-events="none"/>
@@ -324,7 +299,7 @@
 
     <div class="deck">
         <div class="deck-header">
-            <h1>SB PLANETGEN <span class="version">V9.6</span></h1>
+            <h1>SB PLANETGEN <span class="version">V10.1</span></h1>
             <div class="seed-row">
                 <input type="text" id="seed-input" value="AQUA-VITA">
                 <button class="btn-icon" id="btn-rnd" title="Randomize">🎲</button>
@@ -354,10 +329,10 @@
 
                 <div class="slider-group">
                     <div class="slider-header">
-                        <span>Lens Distortion</span>
-                        <span id="lbl-lens">500</span>
+                        <span>Planet Rotation (3D)</span>
+                        <span id="lbl-rotation">0°</span>
                     </div>
-                    <input type="range" id="rng-lens" min="0" max="500" value="500">
+                    <input type="range" id="rng-rotation" min="0" max="360" value="0">
                 </div>
 
                 <div class="toggle-row">
@@ -394,10 +369,9 @@
 
 <script>
 /**
- * SB PLANETGEN V9.6 - CLOUD CLUSTERS
+ * SB PLANETGEN V10.1 - SEAMLESS 3D WRAPPING
  */
 
-// --- 1. REFINED DATABASES ---
 const LIQUIDS = [
     { name: "Water",       color: "#3b82f6", freeze: 0,    boil: 100,  tag: "C",  cloud: "#ffffff", frozenColor: "#e0f2fe", type: "standard", gas: "Water Vapor" },
     { name: "Salt Water",  color: "#2563eb", freeze: -2,   boil: 102,  tag: "C",  cloud: "#f1f5f9", frozenColor: "#bfdbfe", type: "standard", gas: "Water Vapor" },
@@ -441,7 +415,6 @@ const SOLIDS = [
     { name: "Bone",       color: "#fef3c7", tag: "Bio", roughness: 0.9, type: "organic", melt: 200 }
 ];
 
-// --- 2. UTILS ---
 function hexToHSL(hex) {
     let r = parseInt(hex.substring(1,3), 16) / 255;
     let g = parseInt(hex.substring(3,5), 16) / 255;
@@ -497,117 +470,103 @@ function createRNG(str) {
     };
 }
 
-// --- 3. STATE ---
 const state = {
     seed: 'INIT',
     data: null, 
     waterLevel: 50,
     shadow: 50,
     cloudsEnabled: true,
-    lensStrength: 500,
-    layerThresholds: [] // V9.5: Stores the non-linear thresholds
+    rotation: 0, 
+    layerThresholds: []
 };
 
-// --- 4. DOM REFERENCES ---
 const dom = {
     svg: document.getElementById('render-target'),
     defs: document.querySelector('defs'),
+    gAxis: document.getElementById('planet-axis-group'),
+    gSurfaceRotator: document.getElementById('planet-surface-rotator'),
     gTerrain: document.getElementById('group-terrain'),
     gLiquid: document.getElementById('group-liquid'),
     gIce: document.getElementById('group-ice'),
     gBio: document.getElementById('group-bio'),
-    gClouds: document.getElementById('layer-clouds'),
+    gCloudsRotator: document.getElementById('layer-clouds-rotator'),
+    gGeoStructure: document.getElementById('geo-structure-layer'),
     gRingsBack: document.getElementById('layer-rings-back'),
     gRingsFront: document.getElementById('layer-rings-front'),
     rimLight: document.getElementById('rim-light'),
     terminator: document.getElementById('terminator'),
-    
     seedInput: document.getElementById('seed-input'),
     btnRnd: document.getElementById('btn-rnd'),
     btnGen: document.getElementById('btn-gen'),
     btnDownload: document.getElementById('btn-download'),
-    
     rngWater: document.getElementById('rng-water'),
-    rngLens: document.getElementById('rng-lens'),
+    rngRotation: document.getElementById('rng-rotation'),
     rngShadow: document.getElementById('rng-shadow'),
     chkClouds: document.getElementById('chk-clouds'),
     lblWater: document.getElementById('lbl-water'),
-    lblLens: document.getElementById('lbl-lens'),
+    lblRotation: document.getElementById('lbl-rotation'),
     lblShadow: document.getElementById('lbl-shadow'),
-    
     valTemp: document.getElementById('val-temp'),
-    valClimate: document.getElementById('val-climate'),
     valLiquid: document.getElementById('val-liquid'),
     valSolid: document.getElementById('val-solid'),
     valAtmos: document.getElementById('val-atmos'),
     valLife: document.getElementById('val-life'),
 };
 
-// --- 5. LENS GENERATOR REPLACED BY NATIVE SVG ---
-// The manual Canvas generation caused crashes on iOS/Safari due to large Data URI injection.
-// We now use #lens-source defined in <defs> via SVG gradients.
-// The strength slider now controls the scale of the displacement map.
-
-// --- 6. CORE LOGIC ---
+function createLensDataURI(strength = 500) {
+    const size = 256; 
+    const cvs = document.createElement('canvas');
+    cvs.width = size; cvs.height = size;
+    const ctx = cvs.getContext('2d');
+    const imgData = ctx.createImageData(size, size);
+    for(let y=0; y<size; y++) {
+        for(let x=0; x<size; x++) {
+            let nx = (x / size) * 2 - 1, ny = (y / size) * 2 - 1;
+            let d = Math.sqrt(nx*nx + ny*ny);
+            let r = 127 + (nx * d * strength); 
+            let g = 127 + (ny * d * strength);
+            r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g));
+            const i = (y*size + x) * 4;
+            imgData.data[i] = r; imgData.data[i+1] = g; imgData.data[i+2] = 0; imgData.data[i+3] = 255;
+        }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return cvs.toDataURL();
+}
 
 function generatePlanetData(rng) {
-    // 1. Temperature Generation
     let baseTemp = Math.floor(rng() * 450 - 150);
-    if (rng() > 0.92) baseTemp += Math.floor(rng() * 4500); // Increased potential for very hot planets
-    if (rng() < 0.12) baseTemp -= 150; // Increased potential for very cold planets
-
+    if (rng() > 0.92) baseTemp += Math.floor(rng() * 4500);
+    if (rng() < 0.12) baseTemp -= 150;
     const equatorOffset = Math.floor(rng() * 50 + 20);
     const poleOffset = Math.floor(rng() * 80 + 40);
     const maxT = baseTemp + equatorOffset;
     const minT = baseTemp - poleOffset;
-
-    // Helper: Celsius to Kelvin for Ratio calculations
     const CtoK = (c) => c + 273.15;
     const baseK = CtoK(baseTemp);
-
-    // 2. Select Solid
-    // Filter out "Ice" types if the planet is too hot for them
     const validSolids = SOLIDS.filter(s => {
         if (s.type === 'ice' && baseTemp > s.melt) return false;
         return true;
     });
-    
-    let solid = validSolids.length > 0
-        ? validSolids[Math.floor(rng() * validSolids.length)]
-        : { name: "Scorched Crust", color: "#1a0500", tag: "Si", roughness: 1.2, type: "rock", melt: 9999 };
-
-    // Solid State Logic
+    let solid = validSolids.length > 0 ? validSolids[Math.floor(rng() * validSolids.length)] : { name: "Scorched Crust", color: "#1a0500", tag: "Si", roughness: 1.2, type: "rock", melt: 9999 };
     const solidMeltK = CtoK(solid.melt);
     let solidName = solid.name;
-    // Check Molten State (Temperature > 300% Melting Point in Kelvin)
     if (baseK > solidMeltK * 3) {
         solidName = `Molten ${solid.name}`;
         solid = { ...solid, color: artColor(solid.color, 25, 15, 5) };
     }
-
-    // 3. Select Liquid (CRITICAL FIX)
-    // Create a list of liquids that are NOT frozen at the planet's base temperature.
     const potentialLiquids = LIQUIDS.filter(l => baseTemp > l.freeze);
-    
-    let liquid;
-    let oceanName;
-    let liquidState = "none"; // none, liquid, boiling, sediment
-    let cloudColor;
-    let atmosContribution = 0;
-
+    let liquid, oceanName, liquidState = "none", cloudColor, atmosContribution = 0;
     if (potentialLiquids.length > 0) {
-        // A liquid is possible, select one
         liquid = potentialLiquids[Math.floor(rng() * potentialLiquids.length)];
         oceanName = liquid.name;
         cloudColor = liquid.cloud;
         const liquidBoilK = CtoK(liquid.boil);
-
-        // Now check for boiling/sediment states, since we know it's not frozen.
         if (baseK > liquidBoilK * 3) {
             liquidState = "sediment";
             oceanName = `${liquid.name} Sediment`;
             liquid = { ...liquid, color: artColor(liquid.color, -40, -30), tag: "Dry" };
-            cloudColor = "#59544f"; // Dry dust clouds
+            cloudColor = "#59544f"; 
             atmosContribution = 0.8;
         } else if (baseK > liquidBoilK) {
             liquidState = "boiling";
@@ -615,25 +574,19 @@ function generatePlanetData(rng) {
             atmosContribution = 0.4;
         } else {
             liquidState = "liquid";
-            atmosContribution = 0.1; // Baseline for evaporation
+            atmosContribution = 0.1; 
         }
     } else {
-        // Planet is too cold for any available liquids
         liquidState = "none";
         oceanName = "None";
-        liquid = { name: "None", tag: "-", frozenColor: "#a1a1aa", cloud: "#a1a1aa" }; // Fallback object
+        liquid = { name: "None", tag: "-", frozenColor: "#a1a1aa", cloud: "#a1a1aa" };
         cloudColor = "#a1a1aa";
     }
-
-    // 4. Atmosphere Logic
-    let atmosName = "None";
-    let atmosDensity = 0;
-
-    if (rng() > 0.2) { // 80% chance of having some atmosphere
-        atmosDensity = rng() * 0.3; // Base random density
+    let atmosName = "None", atmosDensity = 0;
+    if (rng() > 0.2) { 
+        atmosDensity = rng() * 0.3; 
         atmosDensity += atmosContribution;
-        atmosDensity = Math.max(0, Math.min(1, atmosDensity)); // Clamp
-
+        atmosDensity = Math.max(0, Math.min(1, atmosDensity)); 
         if (liquidState === "sediment") {
             atmosDensity = 0.9 + (rng() * 0.1);
             atmosName = `Dense Vaporized ${liquid.name}`;
@@ -647,14 +600,7 @@ function generatePlanetData(rng) {
     } else {
         atmosName = "Vacuum";
     }
-
-    // 5. Life Logic (Stricter Constraints)
-    let hasLife = false;
-    let lifeType = "None";
-    let bioColor = null;
-    let bioMinT = 0, bioMaxT = 0;
-
-    // Life requires a liquid in its liquid (not boiling/sediment) state.
+    let hasLife = false, lifeType = "None", bioColor = null, bioMinT = 0, bioMaxT = 0;
     if (liquidState === "liquid") {
         if (["Water", "Salt Water"].includes(liquid.name) && baseTemp > -15 && baseTemp < 60) {
             hasLife = true; lifeType = "Carbon-Based"; bioColor = "#10b981";
@@ -664,46 +610,24 @@ function generatePlanetData(rng) {
             bioMinT = 200; bioMaxT = 1000;
         }
     }
-
-    // 6. Visual Params
     const getLatForTemp = (t) => (maxT === minT) ? 0.5 : (maxT - t) / (maxT - minT);
     let latBoil = getLatForTemp(liquid.boil || 9999);
     let latFreeze = getLatForTemp(liquid.freeze || 9998);
-
-    if (liquidState === "sediment") latBoil = -2.0; // Visually covers the whole planet
-
-    let suggestedWater = (liquidState === "none" || liquidState === "sediment") ?
-        Math.floor(rng() * 15) :
-        Math.floor(rng() * 40 + 30);
+    if (liquidState === "sediment") latBoil = -2.0;
+    let suggestedWater = (liquidState === "none" || liquidState === "sediment") ? Math.floor(rng() * 15) : Math.floor(rng() * 40 + 30);
     if (hasLife) suggestedWater = Math.floor(rng() * 20 + 45);
-
     return {
-        baseTemp, maxT, minT,
-        solid, liquid,
-        latBoil, latFreeze,
-        oceanName, solidName,
-        atmosName, atmosDensity,
-        cloudHex: cloudColor,
-        hasLife, lifeType, bioColor, bioMinT, bioMaxT,
-        tilt: rng() * 45, // Increased max tilt
-        rings: rng() < 0.10,
-        baseFreq: 0.006 - ((solid.roughness * 0.5) * 0.0045),
-        suggestedWater,
-        roughness: solid.roughness * (0.5 + rng())
+        baseTemp, maxT, minT, solid, liquid, latBoil, latFreeze, oceanName, solidName, atmosName, atmosDensity,
+        cloudHex: cloudColor, hasLife, lifeType, bioColor, bioMinT, bioMaxT, tilt: rng() * 45, rings: rng() < 0.10,
+        baseFreq: 0.006 - ((solid.roughness * 0.5) * 0.0045), suggestedWater, roughness: solid.roughness * (0.5 + rng())
     };
 }
 
-// V9.5 UPDATE: Expanded Palette to 7 Layers
 function generatePalette(data) {
     const s = data.solid.color;
     return [
-        artColor(s, -45, 10, -15), // 0: Abyssal (Deep canyons)
-        artColor(s, -30, 5, -10),  // 1: Deep
-        artColor(s, -15, 0, -5),   // 2: Low
-        s,                         // 3: Mid (Base)
-        artColor(s, 15, 0, 5),     // 4: High
-        artColor(s, 30, -10, 10),  // 5: Peak
-        artColor(s, 50, -20, 15)   // 6: Summit (Rare)
+        artColor(s, -45, 10, -15), artColor(s, -30, 5, -10), artColor(s, -15, 0, -5), s,
+        artColor(s, 15, 0, 5), artColor(s, 30, -10, 10), artColor(s, 50, -20, 15)
     ];
 }
 
@@ -713,15 +637,12 @@ function getTagHtml(tag) {
     return `<span class="tag ${cls}">[${tag}]</span>`;
 }
 
-// --- 7. RENDERING ---
-
 function fullRebuild() {
     const rng = createRNG(state.seed);
     state.data = generatePlanetData(rng);
     const data = state.data;
     const palette = generatePalette(data);
 
-    // UI
     dom.valTemp.innerHTML = `${data.baseTemp}°C <span style="font-size: 0.8em; opacity: 0.7;">(<span style="color: #60a5fa">${data.minT}°</span> / <span style="color: #f87171">${data.maxT}°</span>)</span>`;
 	dom.valLiquid.innerHTML = data.oceanName + getTagHtml(data.liquid.tag);
     dom.valSolid.innerHTML = data.solidName + getTagHtml(data.solid.tag);
@@ -737,31 +658,37 @@ function fullRebuild() {
 
     const noiseID = `noise-${state.seed}`;
     const structID = `struct-${state.seed}`;
-    
-    // Scale displacement based on slider state (0-500)
-    // Original max scale was 100.
-    const lensScale = state.lensStrength * 0.2; 
+    const lensData = createLensDataURI(600); 
     
     dom.defs.querySelectorAll('.dynamic-def').forEach(el => el.remove());
     dom.gTerrain.innerHTML = '';
     dom.gLiquid.innerHTML = '';
     dom.gIce.innerHTML = '';
     dom.gBio.innerHTML = '';
-    dom.gClouds.innerHTML = '';
+    dom.gCloudsRotator.innerHTML = ''; 
+    dom.gGeoStructure.innerHTML = '';
     dom.gRingsBack.innerHTML = '';
     dom.gRingsFront.innerHTML = '';
 
+    dom.gAxis.setAttribute("transform", `rotate(${data.tilt}, 500, 500)`);
+
+    // --- SEAMLESS FILTER LOGIC ---
+    // x/y/width/height set expansively to prevent clipping during displacement
     const masterFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     masterFilter.setAttribute("id", noiseID);
-    masterFilter.setAttribute("x", "-20%"); masterFilter.setAttribute("y", "-20%");
-    masterFilter.setAttribute("width", "140%"); masterFilter.setAttribute("height", "140%");
-    masterFilter.setAttribute("color-interpolation-filters", "sRGB");
+    masterFilter.setAttribute("x", "-100%"); masterFilter.setAttribute("y", "-100%");
+    masterFilter.setAttribute("width", "300%"); masterFilter.setAttribute("height", "300%");
     masterFilter.classList.add('dynamic-def');
     
     masterFilter.innerHTML = `
-        <feTurbulence type="fractalNoise" baseFrequency="${data.baseFreq}" numOctaves="8" seed="${Math.floor(rng() * 1000)}" result="turb"/>
-        <feImage id="current-lens-map" href="#lens-source" result="lensMap" />
-        <feDisplacementMap id="disp-master" in="turb" in2="lensMap" scale="${lensScale}" xChannelSelector="R" yChannelSelector="G" result="warpedTurb" />
+        <feTurbulence type="fractalNoise" baseFrequency="${data.baseFreq}" numOctaves="8" seed="${Math.floor(rng() * 1000)}" 
+            stitchTiles="stitch" width="1000" height="1000" result="turb"/>
+        <feTile in="turb" result="tiledTurb"/>
+        <feOffset dx="0" dy="0" in="tiledTurb" result="offsetTurb" id="filter-offset-${state.seed}"/>
+        
+        <feImage id="current-lens-map" href="${lensData}" result="lensMap" />
+        <feDisplacementMap in="offsetTurb" in2="lensMap" scale="100" xChannelSelector="R" yChannelSelector="G" result="warpedTurb" />
+        
         <feColorMatrix type="saturate" values="0" in="warpedTurb" result="bw"/>
         <feComponentTransfer in="bw" result="contrasted">
             <feFuncR type="linear" slope="4" intercept="-1.5"/>
@@ -771,14 +698,11 @@ function fullRebuild() {
     `;
     dom.defs.appendChild(masterFilter);
 	
-    // --- CLOUD FILTER V9.6 (Smoothed) ---
     const cloudFilterID = `cloud-atmos-${state.seed}`;
     const cloudFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     cloudFilter.setAttribute("id", cloudFilterID);
     cloudFilter.setAttribute("x", "-50%"); cloudFilter.setAttribute("y", "-50%");
     cloudFilter.setAttribute("width", "200%"); cloudFilter.setAttribute("height", "200%");
-    cloudFilter.setAttribute("color-interpolation-filters", "sRGB");
-    cloudFilter.classList.add('dynamic-def');
     
 	cloudFilter.innerHTML = `
         <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="5" result="noise"/>
@@ -789,21 +713,17 @@ function fullRebuild() {
             <feFuncA type="linear" slope="5" intercept="-1.5"/> 
         </feComponentTransfer>
         
-        <feImage href="#lens-source" result="lensMap"/>
-        <feDisplacementMap id="disp-clouds" in="clouds" in2="lensMap" scale="${lensScale * 0.15}" xChannelSelector="R" yChannelSelector="G" result="finalClouds"/>
+        <feImage href="${lensData}" result="lensMap"/>
+        <feDisplacementMap in="clouds" in2="lensMap" scale="15" xChannelSelector="R" yChannelSelector="G" result="finalClouds"/>
     `;
-    
     dom.defs.appendChild(cloudFilter);
 
-
-    // Geometry
+    // Geometry & Layers
     generateGeology(rng, data, structID);
-    
-    // V9.5: Enhanced Terrain Generation with Exponential Spacing
     generateSolidLayers(rng, data, palette, noiseID, structID);
     
-    createOrganicZoneMask("mask-liquid", data.latBoil, data.latFreeze, data.tilt, "liquid");
-    createOrganicZoneMask("mask-ice", data.latBoil, data.latFreeze, data.tilt, "ice");
+    createOrganicZoneMask("mask-liquid", data.latBoil, data.latFreeze, 0, "liquid");
+    createOrganicZoneMask("mask-ice", data.latBoil, data.latFreeze, 0, "ice");
 
     const lMaskId = `mask-liquid-final-${state.seed}`;
     createCompositeMask(lMaskId, "mask-liquid", noiseID, state.waterLevel/100, true, 120);
@@ -822,9 +742,7 @@ function fullRebuild() {
     liquidRect.setAttribute("width","1000"); liquidRect.setAttribute("height","1000");
     liquidRect.setAttribute("fill", `url(#${oceanGradId})`);
     liquidRect.setAttribute("mask", `url(#${lMaskId})`);
-    
     if (data.liquid.type !== "magma") liquidRect.setAttribute("filter", "url(#liquid-blur)");
-    
     dom.gLiquid.appendChild(liquidRect);
 
     const reflection = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
@@ -845,22 +763,17 @@ function fullRebuild() {
 
     if (data.hasLife) {
         const bioZoneMask = "mask-bio-zone";
-        createOrganicBandMask(bioZoneMask, data.maxT, data.minT, data.bioMinT, data.bioMaxT, data.tilt);
-        
+        createOrganicBandMask(bioZoneMask, data.maxT, data.minT, data.bioMinT, data.bioMaxT, 0);
         const landMaskId = `mask-land-only-${state.seed}`;
         createCompositeMask(landMaskId, null, noiseID, state.waterLevel/255, false); 
-        
         const gBio = document.createElementNS("http://www.w3.org/2000/svg", "g");
         gBio.setAttribute("mask", `url(#${landMaskId})`);
-        
         const bioRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         bioRect.setAttribute("width","1000"); bioRect.setAttribute("height","1000");
         bioRect.setAttribute("fill", data.bioColor);
         bioRect.setAttribute("mask", `url(#${bioZoneMask})`);
-        
         bioRect.setAttribute("opacity", "0.7");
         bioRect.style.mixBlendMode = "multiply"; 
-        
         gBio.appendChild(bioRect);
         dom.gBio.appendChild(gBio);
     }
@@ -869,17 +782,16 @@ function fullRebuild() {
         generateClouds(rng, data);
     }
     
-    const atCol = data.cloudHex;
     const gradAtmos = document.createElementNS("http://www.w3.org/2000/svg", "radialGradient");
     gradAtmos.setAttribute("id", "grad-atmos");
     gradAtmos.classList.add('dynamic-def');
     gradAtmos.innerHTML = `
-        <stop offset="85%" stop-color="${atCol}" stop-opacity="0" />
-        <stop offset="95%" stop-color="${atCol}" stop-opacity="${data.atmosDensity * 0.4}" />
-        <stop offset="100%" stop-color="${atCol}" stop-opacity="${data.atmosDensity}" />
+        <stop offset="85%" stop-color="${data.cloudHex}" stop-opacity="0" />
+        <stop offset="95%" stop-color="${data.cloudHex}" stop-opacity="${data.atmosDensity * 0.4}" />
+        <stop offset="100%" stop-color="${data.cloudHex}" stop-opacity="${data.atmosDensity}" />
     `;
     dom.defs.appendChild(gradAtmos);
-    dom.rimLight.setAttribute('stroke', artColor(atCol, 20, -10, 0));
+    dom.rimLight.setAttribute('stroke', artColor(data.cloudHex, 20, -10, 0));
 
     if (data.rings) generateRings(rng, data);
 
@@ -899,32 +811,15 @@ function createOrganicZoneMask(id, latBoil, latFreeze, tilt, type) {
     const frzY_top  = 0.5 - (latFreeze * 0.5);
     const boilY_bot = 0.5 + (latBoil * 0.5);
     const frzY_bot  = 0.5 + (latFreeze * 0.5);
-    
     const spread = 0.02;
 
 	if (type === "liquid") {
-        stops = `
-            <stop offset="0%" stop-color="white" />
-            <stop offset="${(boilY_top-spread)*100}%" stop-color="white" />
-            <stop offset="${(boilY_top+spread)*100}%" stop-color="#c0c0c0" />
-            <stop offset="${(boilY_bot-spread)*100}%" stop-color="#c0c0c0" />
-            <stop offset="${(boilY_bot+spread)*100}%" stop-color="white" />
-            <stop offset="100%" stop-color="white" />
-        `;
+        stops = `<stop offset="0%" stop-color="white"/><stop offset="${(boilY_top-spread)*100}%" stop-color="white"/><stop offset="${(boilY_top+spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(boilY_bot-spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(boilY_bot+spread)*100}%" stop-color="white"/><stop offset="100%" stop-color="white"/>`;
     } else if (type === "ice") {
-        stops = `
-            <stop offset="0%" stop-color="white" />
-            <stop offset="${(frzY_top-spread)*100}%" stop-color="white" />
-            <stop offset="${(frzY_top+spread)*100}%" stop-color="#c0c0c0" />
-            <stop offset="${(frzY_bot-spread)*100}%" stop-color="#c0c0c0" />
-            <stop offset="${(frzY_bot+spread)*100}%" stop-color="white" />
-            <stop offset="100%" stop-color="white" />
-        `;
+        stops = `<stop offset="0%" stop-color="white"/><stop offset="${(frzY_top-spread)*100}%" stop-color="white"/><stop offset="${(frzY_top+spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(frzY_bot-spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(frzY_bot+spread)*100}%" stop-color="white"/><stop offset="100%" stop-color="white"/>`;
     }
-    
     grad.innerHTML = stops;
     dom.defs.appendChild(grad);
-
     const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
     mask.setAttribute("id", id);
     mask.classList.add('dynamic-def');
@@ -932,7 +827,6 @@ function createOrganicZoneMask(id, latBoil, latFreeze, tilt, type) {
     rect.setAttribute("width", "1000"); rect.setAttribute("height", "1000");
     rect.setAttribute("fill", `url(#${gradId})`);
     rect.setAttribute("filter", "url(#zone-warp)");
-    
     mask.appendChild(rect);
     dom.defs.appendChild(mask);
 }
@@ -941,35 +835,17 @@ function createOrganicBandMask(id, maxT, minT, targetMin, targetMax, tilt) {
     const getLat = (t) => (maxT - t) / (maxT - minT);
     let lat1 = Math.max(0, Math.min(1, getLat(targetMax))); 
     let lat2 = Math.max(0, Math.min(1, getLat(targetMin))); 
-    
-    const y1_top = 0.5 - lat1 * 0.5;
-    const y2_top = 0.5 - lat2 * 0.5;
-    const y1_bot = 0.5 + lat1 * 0.5;
-    const y2_bot = 0.5 + lat2 * 0.5;
-    
+    const y1_top = 0.5 - lat1 * 0.5; const y2_top = 0.5 - lat2 * 0.5;
+    const y1_bot = 0.5 + lat1 * 0.5; const y2_bot = 0.5 + lat2 * 0.5;
     const gradId = `grad-${id}-${state.seed}`;
     const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
     grad.setAttribute("id", gradId);
     grad.setAttribute("x1", "0"); grad.setAttribute("y1", "0"); grad.setAttribute("y2", "1");
     grad.setAttribute("gradientTransform", `rotate(${tilt}, 0.5, 0.5)`);
     grad.classList.add('dynamic-def');
-    
     const spread = 0.05; 
-    
-    grad.innerHTML = `
-        <stop offset="0%" stop-color="#c0c0c0" />
-        <stop offset="${(y2_top-spread)*100}%" stop-color="#c0c0c0" />
-        <stop offset="${(y2_top+spread)*100}%" stop-color="white" />
-        <stop offset="${(y1_top-spread)*100}%" stop-color="white" />
-        <stop offset="${(y1_top+spread)*100}%" stop-color="#c0c0c0" />
-        <stop offset="${(y1_bot-spread)*100}%" stop-color="#c0c0c0" />
-        <stop offset="${(y1_bot+spread)*100}%" stop-color="white" />
-        <stop offset="${(y2_bot-spread)*100}%" stop-color="white" />
-        <stop offset="${(y2_bot+spread)*100}%" stop-color="#c0c0c0" />
-        <stop offset="100%" stop-color="#c0c0c0" />
-    `;
+    grad.innerHTML = `<stop offset="0%" stop-color="#c0c0c0"/><stop offset="${(y2_top-spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(y2_top+spread)*100}%" stop-color="white"/><stop offset="${(y1_top-spread)*100}%" stop-color="white"/><stop offset="${(y1_top+spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(y1_bot-spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(y1_bot+spread)*100}%" stop-color="white"/><stop offset="${(y2_bot-spread)*100}%" stop-color="white"/><stop offset="${(y2_bot+spread)*100}%" stop-color="#c0c0c0"/><stop offset="100%" stop-color="#c0c0c0"/>`;
     dom.defs.appendChild(grad);
-
     const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
     mask.setAttribute("id", id);
     mask.classList.add('dynamic-def');
@@ -977,7 +853,6 @@ function createOrganicBandMask(id, maxT, minT, targetMin, targetMax, tilt) {
     rect.setAttribute("width", "1000"); rect.setAttribute("height", "1000");
     rect.setAttribute("fill", `url(#${gradId})`);
     rect.setAttribute("filter", "url(#zone-warp)");
-    
     mask.appendChild(rect);
     dom.defs.appendChild(mask);
 }
@@ -986,68 +861,31 @@ function createCompositeMask(id, thermalMaskId, noiseId, threshold, invert, slop
     const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
     mask.setAttribute("id", id);
     mask.classList.add('dynamic-def');
-
     const threshId = `thresh-${id}`;
     const filter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     filter.setAttribute("id", threshId);
     filter.classList.add('dynamic-def');
-    filter.setAttribute("color-interpolation-filters", "sRGB");
-    
-    let slope = slopeVal;
-    let intercept = -(threshold * slope) + 0.5;
-    
-    if (invert) {
-        slope = -slopeVal;
-        intercept = (threshold * slopeVal) + 0.5;
-    }
-
-    filter.innerHTML = `
-        <feComponentTransfer>
-            <feFuncR type="linear" slope="${slope}" intercept="${intercept}" />
-            <feFuncG type="linear" slope="${slope}" intercept="${intercept}" />
-            <feFuncB type="linear" slope="${slope}" intercept="${intercept}" />
-        </feComponentTransfer>
-    `;
+    let slope = slopeVal, intercept = -(threshold * slope) + 0.5;
+    if (invert) { slope = -slopeVal; intercept = (threshold * slopeVal) + 0.5; }
+    filter.innerHTML = `<feComponentTransfer><feFuncR type="linear" slope="${slope}" intercept="${intercept}" /><feFuncG type="linear" slope="${slope}" intercept="${intercept}" /><feFuncB type="linear" slope="${slope}" intercept="${intercept}" /></feComponentTransfer>`;
     dom.defs.appendChild(filter);
-
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    
     const r1 = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     r1.setAttribute("width","1000"); r1.setAttribute("height","1000");
-    r1.setAttribute("filter", `url(#${noiseId}) url(#geo-warp) url(#${threshId})`);
+    r1.setAttribute("filter", `url(#${noiseId}) url(#${threshId})`);
     g.appendChild(r1);
-
-    if (thermalMaskId) {
-        r1.setAttribute("mask", `url(#${thermalMaskId})`);
-    }
-
+    if (thermalMaskId) { r1.setAttribute("mask", `url(#${thermalMaskId})`); }
     mask.appendChild(g);
     dom.defs.appendChild(mask);
 }
 
-// V9.5: Updated with EXPONENTIAL SPACING and MATERIAL MODULATION
 function generateSolidLayers(rng, data, palette, noiseID, structID) {
-    state.layerThresholds = []; // Reset thresholds
-    
-    // 1. Calculate Exponential Spacing Steps
-    // Formula: next = prev + (gap * 1.08^i)
-    let stops = [0];
-    let current = 0;
-    
-    // Material Modulation: Smoother rocks (sandstone) have wider gaps, Crystals have tight gaps
-    let gapBase = 0.05;
+    state.layerThresholds = []; 
+    let stops = [0], current = 0, gapBase = 0.05;
     if (data.solid.type === 'crystal') gapBase = 0.03;
     if (data.solid.roughness < 0.6) gapBase = 0.08;
-
-    const multiplier = 1.08; // 1.15x spacing increase per step
-
-    for(let i=1; i<palette.length; i++) {
-        current += gapBase;
-        stops.push(current);
-        gapBase *= multiplier;
-    }
-    
-    // Normalize stops to fit roughly within 0.2 to 0.9 range of the noise map
+    const multiplier = 1.08; 
+    for(let i=1; i<palette.length; i++) { current += gapBase; stops.push(current); gapBase *= multiplier; }
     const maxVal = stops[stops.length-1];
     const normalizedStops = stops.map(v => 0.08 + (v / maxVal) * 0.75);
 
@@ -1056,45 +894,25 @@ function generateSolidLayers(rng, data, palette, noiseID, structID) {
         const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
         mask.setAttribute("id", maskID);
         mask.classList.add('dynamic-def');
-
         const gMask = document.createElementNS("http://www.w3.org/2000/svg", "g");
         const rectNoise = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         rectNoise.setAttribute("width", "1000"); rectNoise.setAttribute("height", "1000");
-        rectNoise.setAttribute("filter", `url(#${noiseID}) url(#geo-warp)`); 
-
-        const useStruct = document.createElementNS("http://www.w3.org/2000/svg", "use");
-        useStruct.setAttribute("href", `#${structID}`);
-        useStruct.style.mixBlendMode = "lighten"; 
-
+        rectNoise.setAttribute("filter", `url(#${noiseID})`); 
         gMask.appendChild(rectNoise);
-        gMask.appendChild(useStruct);
 
         const threshID = `thresh-layer-${i}`;
         const threshFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
         threshFilter.setAttribute("id", threshID);
-        threshFilter.setAttribute("color-interpolation-filters", "sRGB");
         threshFilter.classList.add('dynamic-def');
-        
-        // Jitter: Small random variance to break the perfect bullseye across layers
         const jitter = (rng() * 0.04) - 0.02;
         const level = Math.max(0, Math.min(1, normalizedStops[i] + jitter));
-        state.layerThresholds.push(level); // Store base level for updates
-
-        const slope = 60; // Slightly steeper for distinct terracing
-        const intercept = -(level * slope);
-        threshFilter.innerHTML = `
-            <feComponentTransfer>
-                <feFuncR type="linear" slope="${slope}" intercept="${intercept}" />
-                <feFuncG type="linear" slope="${slope}" intercept="${intercept}" />
-                <feFuncB type="linear" slope="${slope}" intercept="${intercept}" />
-            </feComponentTransfer>
-        `;
-        
+        state.layerThresholds.push(level); 
+        const slope = 60, intercept = -(level * slope);
+        threshFilter.innerHTML = `<feComponentTransfer><feFuncR type="linear" slope="${slope}" intercept="${intercept}" /><feFuncG type="linear" slope="${slope}" intercept="${intercept}" /><feFuncB type="linear" slope="${slope}" intercept="${intercept}" /></feComponentTransfer>`;
         dom.defs.appendChild(threshFilter);
         gMask.setAttribute("filter", `url(#${threshID})`);
         mask.appendChild(gMask);
         dom.defs.appendChild(mask);
-
         const layerRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         layerRect.setAttribute("width", "1000"); layerRect.setAttribute("height", "1000");
         layerRect.setAttribute("fill", color);
@@ -1104,9 +922,61 @@ function generateSolidLayers(rng, data, palette, noiseID, structID) {
 }
 
 function generateGeology(rng, data, id) {
-    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    g.setAttribute("id", id);
-    g.classList.add('dynamic-def');
+    dom.gGeoStructure.innerHTML = '';
+    const container = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    container.setAttribute("id", "geo-container");
+    
+    // --- WRAPPING LOGIC FOR VECTORS ---
+    // If a vector line crosses the boundary 0 or 1000, we must draw it on both sides.
+    if (data.roughness > 0.5) {
+        const count = Math.ceil(8 * data.roughness);
+        for (let i = 0; i < count; i++) {
+            const lat1 = rng()*2-1; const lon1 = rng()*6.28;
+            const lat2 = rng()*2-1; const lon2 = lon1 + rng();
+            
+            // Helper to render path at a specific X offset
+            const renderPath = (offsetX) => {
+                let d = "";
+                for(let t=0; t<=12; t++) {
+                    const step = t/12;
+                    const lat = lat1+(lat2-lat1)*step;
+                    const lon = lon1+(lon2-lon1)*step;
+                    const p = projectSphere(450, lat, lon, 0); 
+                    const xFinal = p.x + offsetX;
+                    if(p.z > -100) d += (t===0?"M":"L") + ` ${xFinal} ${p.y}`;
+                }
+                if(d) {
+                    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    path.setAttribute("d", d);
+                    path.setAttribute("fill", "none");
+                    path.setAttribute("stroke", "white");
+                    path.setAttribute("stroke-width", rng() * 30 + 10);
+                    path.setAttribute("filter", "url(#geo-blur)");
+                    path.setAttribute("opacity", 0.6 * data.roughness);
+                    container.appendChild(path);
+                }
+            };
+            
+            // Render at standard position
+            renderPath(0);
+            // Render shadows at +/- 1000 for seamless scroll
+            renderPath(-1000);
+            renderPath(1000);
+        }
+    }
+    
+    // We group them into a wrapper. We do not need a clone here because we baked the ghosts into the container
+    // However, to scroll continuously, we do need a clone of the entire container placed at +1000 IF we used the old logic.
+    // BUT since we baked -1000 and +1000, this container covers -500 to 1500 roughly. 
+    // Wait, the safest seamless method is:
+    // 1. Render object at 0.
+    // 2. Wrap it into a group.
+    // 3. Clone that group at -1000 and +1000.
+    // That's simpler than calculating offsets inside the loop. Let's do that.
+    
+    // Redo logic:
+    dom.gGeoStructure.innerHTML = ''; // Clear
+    const singleTile = document.createElementNS("http://www.w3.org/2000/svg", "g");
 
     if (data.roughness > 0.5) {
         const count = Math.ceil(8 * data.roughness);
@@ -1118,7 +988,7 @@ function generateGeology(rng, data, id) {
                 const step = t/12;
                 const lat = lat1+(lat2-lat1)*step;
                 const lon = lon1+(lon2-lon1)*step;
-                const p = projectSphere(450, lat, lon, data.tilt);
+                const p = projectSphere(450, lat, lon, 0); 
                 if(p.z > -100) d += (t===0?"M":"L") + ` ${p.x} ${p.y}`;
             }
             if(d) {
@@ -1129,69 +999,67 @@ function generateGeology(rng, data, id) {
                 path.setAttribute("stroke-width", rng() * 30 + 10);
                 path.setAttribute("filter", "url(#geo-blur)");
                 path.setAttribute("opacity", 0.6 * data.roughness);
-                g.appendChild(path);
+                singleTile.appendChild(path);
             }
         }
     }
-    dom.defs.appendChild(g);
+
+    // Now build the infinite wrapper
+    const wrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    wrapper.setAttribute("id", "geo-wrapper");
+    
+    const tileLeft = singleTile.cloneNode(true); tileLeft.setAttribute("transform", "translate(-1000,0)");
+    const tileRight = singleTile.cloneNode(true); tileRight.setAttribute("transform", "translate(1000,0)");
+    
+    wrapper.appendChild(tileLeft);
+    wrapper.appendChild(singleTile);
+    wrapper.appendChild(tileRight);
+    
+    // Apply lens to the whole wrapped group
+    const lensData = createLensDataURI(500); 
+    const geoFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
+    geoFilter.setAttribute("id", `geo-lens-${state.seed}`);
+    geoFilter.setAttribute("x", "-50%"); geoFilter.setAttribute("y", "-50%");
+    geoFilter.setAttribute("width", "200%"); geoFilter.setAttribute("height", "200%");
+    geoFilter.innerHTML = `<feImage href="${lensData}" result="lensMap"/><feDisplacementMap in="SourceGraphic" in2="lensMap" scale="50" xChannelSelector="R" yChannelSelector="G"/>`;
+    dom.defs.appendChild(geoFilter);
+    
+    wrapper.setAttribute("filter", `url(#geo-lens-${state.seed})`);
+
+    dom.gGeoStructure.appendChild(wrapper);
 }
 
-// --- V10.0: NATURAL FLOW & COMPLEX SYSTEMS ---
 function generateClouds(rng, data) {
     if (!state.cloudsEnabled || data.atmosDensity < 0.1) {
-        dom.gClouds.innerHTML = '';
+        dom.gCloudsRotator.innerHTML = '';
         return;
     }
 
-    // --- HELPER 1: Generate a natural spine that wraps the sphere ---
-    const generateCloudSpine = (yBase, width, xOffset, R) => {
+    const R = 640; 
+    const generateCloudSpine = (yBase, width, xOffset) => {
         const points = [];
         const steps = 60;
         const startX = -width / 2 + xOffset;
         const stepSize = width / steps;
-        
         let yDrift = 0;
-        const driftStrength = 1.0; 
-
         for (let i = 0; i <= steps; i++) {
             const xRel = startX + (i * stepSize);
             const xRatio = xRel / R;
-            
-            // CURVATURE:
-            // yBase is negative in North, positive in South.
-            // North: yBase(-) * -0.8 = Positive term. 
-            //    Center (x=0) is yBase. Edge is yBase + Pos.
-            //    Center is "Higher" (more negative) than Edge. Frown. Correct.
-            // South: yBase(+) * -0.8 = Negative term.
-            //    Center (x=0) is yBase. Edge is yBase - Neg.
-            //    Center is "Lower" (more positive) than Edge. Smile. Correct.
             const sphereCurve = (xRatio * xRatio) * yBase * -0.8; 
-            
             let y = yBase + sphereCurve;
-
-            // Organic drift
-            yDrift += (rng() - 0.5) * driftStrength;
-            yDrift *= 0.95; // Dampen
+            yDrift += (rng() - 0.5) * 1.0;
+            yDrift *= 0.95;
             y += yDrift;
-
             points.push({ x: 500 + xRel, y: 500 + y });
         }
         return points;
     };
 
-    // --- HELPER 2: Inflate spine into shape ---
     const generateCloudShapeFromSpine = (spinePoints, options = {}) => {
-        const {
-            baseThickness = 30, 
-            thicknessVariance = 10, 
-            edgeNoise = 10, 
-            taperPower = 0.5,
-        } = options;
-
+        const { baseThickness=30, thicknessVariance=10, edgeNoise=10, taperPower=0.5 } = options;
         if (spinePoints.length < 3) return "";
         const topPoints = [], botPoints = [];
         let thickness = baseThickness;
-
         for (let i = 0; i < spinePoints.length; i++) {
             const p_curr = spinePoints[i];
             const p_next = spinePoints[Math.min(spinePoints.length-1, i+1)];
@@ -1200,27 +1068,16 @@ function generateClouds(rng, data) {
             let nx = -dy, ny = dx;
             const len = Math.sqrt(nx*nx+ny*ny);
             if (len > 0) { nx /= len; ny /= len; }
-
             const progress = i / (spinePoints.length - 1);
             const taper = Math.sin(progress * Math.PI); 
             const thickMod = Math.pow(taper, taperPower);
-
             thickness += (rng() - 0.5) * (thicknessVariance / 5);
             thickness = Math.max(5, thickness); 
-            
             const currentThick = thickness * thickMod;
             const jag = (rng() - 0.5) * edgeNoise * thickMod;
-            
-            topPoints.push({
-                x: p_curr.x + nx * (currentThick * 0.5 + jag),
-                y: p_curr.y + ny * (currentThick * 0.5 + jag)
-            });
-            botPoints.push({
-                x: p_curr.x - nx * (currentThick * 0.5 + jag),
-                y: p_curr.y - ny * (currentThick * 0.5 + jag)
-            });
+            topPoints.push({ x: p_curr.x + nx * (currentThick * 0.5 + jag), y: p_curr.y + ny * (currentThick * 0.5 + jag) });
+            botPoints.push({ x: p_curr.x - nx * (currentThick * 0.5 + jag), y: p_curr.y - ny * (currentThick * 0.5 + jag) });
         }
-
         let d = `M ${topPoints[0].x.toFixed(1)} ${topPoints[0].y.toFixed(1)}`;
         for (let i = 1; i < topPoints.length; i++) d += ` L ${topPoints[i].x.toFixed(1)} ${topPoints[i].y.toFixed(1)}`;
         for (let i = botPoints.length - 1; i >= 0; i--) d += ` L ${botPoints[i].x.toFixed(1)} ${botPoints[i].y.toFixed(1)}`;
@@ -1228,29 +1085,19 @@ function generateClouds(rng, data) {
         return d;
     };
 
-    // --- HELPER 3: Build the Stacked System ---
-    const generateCloudSystem = (driverSpine, baseColor, yBase, R) => {
+    const generateCloudSystem = (driverSpine, baseColor, yBase) => {
         const systemElements = [];
         const stackingDirection = yBase < 0 ? -1 : 1; 
-
-        // Reusable stack generator
         const createStack = (spine, layers, scale) => {
             const elements = [];
-            
-            // Loop from 0 (Equator-side Base) to Max (Pole-side Tip)
             for (let i = 0; i <= layers; i++) {
-                // Size Decay
                 const lengthRatio = 1.0 - (i * 0.08); 
                 const subLength = Math.floor(spine.length * Math.max(0.4, lengthRatio));
                 const slack = spine.length - subLength;
-                
                 const startIdx = Math.floor(rng() * (slack * 0.8) + (slack * 0.1));
                 const baseSubSpine = spine.slice(startIdx, startIdx + subLength);
-
-                // Offset Calculation
                 const offsetDist = i * 14 * scale * stackingDirection; 
                 const disjointX = (rng() - 0.5) * 20 * scale; 
-
                 const offsetSubSpine = baseSubSpine.map((p, j, arr) => {
                     const p_next = arr[Math.min(arr.length-1, j+1)];
                     const p_prev = arr[Math.max(0, j-1)];
@@ -1260,68 +1107,29 @@ function generateClouds(rng, data) {
                     if (len > 0) { nx /= len; ny /= len; }
                     return { x: p.x + (nx * offsetDist) + disjointX, y: p.y + (ny * offsetDist) };
                 });
-
                 const subPathData = generateCloudShapeFromSpine(offsetSubSpine, {
-                    baseThickness: (35 - (i * 2)) * scale, 
-                    edgeNoise: (12 + i) * scale,
-                    taperPower: 0.5
+                    baseThickness: (35 - (i * 2)) * scale, edgeNoise: (12 + i) * scale, taperPower: 0.5
                 });
-
                 if (subPathData) {
                     const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                    
-                    // GRADIENT LOGIC:
-                    // Layer 0 is closest to Equator/Sun -> Lightest
-                    // Layer Max is closest to Pole/Shadow -> Darkest (Base Color)
                     const lightShift = 40 - (i * 10); 
-
                     const subColor = artColor(baseColor, lightShift, -5);
                     el.setAttribute("d", subPathData);
                     el.setAttribute("fill", subColor);
-                    
-                    // Keeps "Erosion" effect on edges
                     el.setAttribute("fill-opacity", 0.6); 
                     elements.push(el);
                 }
             }
             return elements;
         };
-
-        // A. Generate Main Body
         const mainLayers = Math.floor(rng() * 4) + 4; 
         systemElements.push(...createStack(driverSpine, mainLayers, 1.0));
-
-        // B. Generate Sidecar (Extension)
-        const goRight = rng() > 0.5;
-        const attachPoint = goRight ? driverSpine[driverSpine.length - 1] : driverSpine[0];
-        const attachRelX = attachPoint.x - 500;
-        
-        const sidecarWidth = (rng() * 100) + 80;
-        const overlap = 40; 
-        const sidecarCenterOffset = goRight 
-            ? attachRelX + (sidecarWidth/2) - overlap 
-            : attachRelX - (sidecarWidth/2) + overlap;
-
-        const sidecarSpine = generateCloudSpine(yBase, sidecarWidth, sidecarCenterOffset, R);
-        const sidecarLayers = Math.floor(rng() * 3) + 2; 
-        
-        systemElements.push(...createStack(sidecarSpine, sidecarLayers, 0.75));
-
         return systemElements;
     };
 
-    // --- MAIN EXECUTION ---
-    dom.gClouds.innerHTML = '';
-    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    g.setAttribute("transform", `rotate(${data.tilt}, 500, 500)`);
-    g.setAttribute("filter", `url(#cloud-atmos-${state.seed})`);
-    
-    // TRANSPARENCY FIX:
-    // This applies 60% opacity to the entire group *after* the filter merges the shapes.
-    // This makes the clouds see-through without overlapping additive artifacts.
-    g.setAttribute("opacity", "0.6");
+    dom.gCloudsRotator.innerHTML = '';
+    const singleTile = document.createElementNS("http://www.w3.org/2000/svg", "g");
 
-    const R = 640;
     const clusterCount = Math.floor(rng() * 2) + 3;
     const range = 1.85; 
     const zoneSize = range / clusterCount;
@@ -1330,151 +1138,94 @@ function generateClouds(rng, data) {
         const zoneTop = -(range/2) + (i * zoneSize);
         const latPos = zoneTop + (rng() * zoneSize * 0.8) + (zoneSize * 0.1);
         const yBase = latPos * R;
-        
         const maxChord = Math.sqrt(Math.max(0, R*R - yBase*yBase)) * 2;
         const width = maxChord * (0.2 + rng() * 0.7);
         const maxOffset = (maxChord - width) / 2;
         const xOffset = (rng() * maxOffset * 2) - maxOffset;
-
-        // Base color varies by latitude
         const dist = Math.abs(latPos);
         const col = artColor(data.cloudHex, dist * -15, dist * -5);
-
-        const spine = generateCloudSpine(yBase, width, xOffset, R);
-        const els = generateCloudSystem(spine, col, yBase, R);
-        
-        els.forEach(el => g.appendChild(el));
+        const spine = generateCloudSpine(yBase, width, xOffset);
+        const els = generateCloudSystem(spine, col, yBase);
+        els.forEach(el => singleTile.appendChild(el));
     }
 
-    dom.gClouds.appendChild(g);
+    const wrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    wrapper.setAttribute("id", "cloud-wrapper");
+    wrapper.setAttribute("filter", `url(#cloud-atmos-${state.seed})`);
+    wrapper.setAttribute("opacity", "0.6");
+    
+    const tileLeft = singleTile.cloneNode(true); tileLeft.setAttribute("transform", "translate(-1000,0)");
+    const tileRight = singleTile.cloneNode(true); tileRight.setAttribute("transform", "translate(1000,0)");
+    
+    wrapper.appendChild(tileLeft);
+    wrapper.appendChild(singleTile);
+    wrapper.appendChild(tileRight);
+    
+    dom.gCloudsRotator.appendChild(wrapper);
 }
 
 function generateRings(rng, data) {
     dom.gRingsBack.innerHTML = '';
     dom.gRingsFront.innerHTML = '';
-
-    // --- VARIANT A: SIMPLE RINGS (80% Chance) ---
+    const tilt = data.tilt; 
     if (rng() > 0.2) {
         const ringBase = data.solid.color;
         for(let i=0; i<8; i++) {
-            const r = 600 + i * 20;
-            const ry = r * 0.25;
+            const r = 600 + i * 20; const ry = r * 0.25;
             const arc = (s,e) => {
                 const rad=Math.PI/180;
                 const sx=500+r*Math.cos(e*rad), sy=500+ry*Math.sin(e*rad);
                 const ex=500+r*Math.cos(s*rad), ey=500+ry*Math.sin(s*rad);
                 return `M ${sx} ${sy} A ${r} ${ry} 0 0 0 ${ex} ${ey}`;
             };
-            const width = rng()*8+2;
-            const opacity = rng() * 0.3 + 0.1;
+            const width = rng()*8+2; const opacity = rng() * 0.3 + 0.1;
             const color = artColor(ringBase, (i%2===0?20:-20), -10, 0);
-
             const back = document.createElementNS("http://www.w3.org/2000/svg", "path");
             back.setAttribute("d", arc(180, 360));
-            back.setAttribute("stroke", color);
-            back.setAttribute("fill", "none");
-            back.setAttribute("stroke-width", width);
-            back.setAttribute("opacity", opacity);
-            back.setAttribute("transform", `rotate(${data.tilt}, 500, 500)`);
+            back.setAttribute("stroke", color); back.setAttribute("fill", "none");
+            back.setAttribute("stroke-width", width); back.setAttribute("opacity", opacity);
+            back.setAttribute("transform", `rotate(${tilt}, 500, 500)`);
             dom.gRingsBack.appendChild(back);
-            
             const front = back.cloneNode();
             front.setAttribute("d", arc(0, 180));
             dom.gRingsFront.appendChild(front);
         }
         return;
     }
-
-    // --- VARIANT B: COMPLEX PARTICLE RINGS (20% Chance) ---
-
-    // 1. Define Palette & Properties
-    const solidColor = data.solid.color;
-    const iceColor = data.liquid.frozenColor || "#e0f2fe";
-    const palette = [
-        solidColor,
-        iceColor,
-        artColor(solidColor, 15, -10),
-        artColor(iceColor, -15, 5)
-    ];
-
-    const perspective = 0.25 + rng() * 0.15; // How elliptical the rings appear
-    const systemTilt = data.tilt;
-
-    // 2. Define Ring Bands Structure (e.g., Saturn's A, B rings and Cassini Division)
+    const solidColor = data.solid.color; const iceColor = data.liquid.frozenColor || "#e0f2fe";
+    const palette = [solidColor, iceColor, artColor(solidColor, 15, -10), artColor(iceColor, -15, 5)];
+    const perspective = 0.25 + rng() * 0.15; 
     const bands = [
         { name: "B-Ring", start: 540, end: 650, density: 0.8, particles: 200 },
-        // This gap represents the Cassini Division
         { name: "A-Ring", start: 670, end: 800, density: 0.5, particles: 200 },
         { name: "F-Ring", start: 810, end: 825, density: 0.3, particles: 30 }
     ];
-
     const createArcPath = (radius, ry, startAngle, endAngle) => {
         const rad = Math.PI / 180;
-        const sx = 500 + radius * Math.cos(endAngle * rad);
-        const sy = 500 + ry * Math.sin(endAngle * rad);
-        const ex = 500 + radius * Math.cos(startAngle * rad);
-        const ey = 500 + ry * Math.sin(startAngle * rad);
+        const sx = 500 + radius * Math.cos(endAngle * rad); const sy = 500 + ry * Math.sin(endAngle * rad);
+        const ex = 500 + radius * Math.cos(startAngle * rad); const ey = 500 + ry * Math.sin(startAngle * rad);
         return `M ${sx} ${sy} A ${radius} ${ry} 0 0 0 ${ex} ${ey}`;
     };
-
-    // 3. Generate Ringlets for each band
     bands.forEach(band => {
         for (let i = 0; i < band.particles; i++) {
             const progress = rng();
             const radius = band.start + progress * (band.end - band.start);
             const ry = radius * perspective;
-
-            // Density waves using a sine function to create clumps
             const wave = Math.sin(progress * Math.PI * (10 + rng() * 10));
-            const baseOpacity = (band.density * 0.3) * (0.5 + rng() * 0.5);
-            const finalOpacity = baseOpacity + wave * 0.1;
-            
+            const finalOpacity = (band.density * 0.3) * (0.5 + rng() * 0.5) + wave * 0.1;
             if (finalOpacity < 0.04) continue;
-
             const color = palette[Math.floor(rng() * palette.length)];
             const width = 1 + rng() * 3.5;
-
             const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            path.setAttribute("stroke", color);
-            path.setAttribute("fill", "none");
-            path.setAttribute("stroke-width", width);
-            path.setAttribute("stroke-opacity", finalOpacity);
-            path.setAttribute("transform", `rotate(${systemTilt}, 500, 500)`);
-            
-            // Back half
-            const backPath = path.cloneNode();
-            backPath.setAttribute("d", createArcPath(radius, ry, 180, 360));
+            path.setAttribute("stroke", color); path.setAttribute("fill", "none");
+            path.setAttribute("stroke-width", width); path.setAttribute("stroke-opacity", finalOpacity);
+            path.setAttribute("transform", `rotate(${tilt}, 500, 500)`);
+            const backPath = path.cloneNode(); backPath.setAttribute("d", createArcPath(radius, ry, 180, 360));
             dom.gRingsBack.appendChild(backPath);
-
-            // Front half
-            const frontPath = path.cloneNode();
-            frontPath.setAttribute("d", createArcPath(radius, ry, 0, 180));
+            const frontPath = path.cloneNode(); frontPath.setAttribute("d", createArcPath(radius, ry, 0, 180));
             dom.gRingsFront.appendChild(frontPath);
         }
     });
-
-    // 4. Add a few distinct "Shepherd" ringlets or features
-    const specialFeatures = Math.floor(rng() * 3);
-    for (let i = 0; i < specialFeatures; i++) {
-        const randomBand = bands[Math.floor(rng() * bands.length)];
-        const radius = randomBand.start + rng() * (randomBand.end - randomBand.start);
-        const ry = radius * perspective;
-        
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("stroke", artColor(palette[1], 40, 10)); // A bright, distinct color
-        path.setAttribute("fill", "none");
-        path.setAttribute("stroke-width", 2 + rng() * 2);
-        path.setAttribute("stroke-opacity", 0.7 + rng() * 0.2);
-        path.setAttribute("transform", `rotate(${systemTilt}, 500, 500)`);
-
-        const backPath = path.cloneNode();
-        backPath.setAttribute("d", createArcPath(radius, ry, 180, 360));
-        dom.gRingsBack.appendChild(backPath);
-
-        const frontPath = path.cloneNode();
-        frontPath.setAttribute("d", createArcPath(radius, ry, 0, 180));
-        dom.gRingsFront.appendChild(frontPath);
-    }
 }
 
 function projectSphere(r, lat, lon, tilt) {
@@ -1487,7 +1238,6 @@ function projectSphere(r, lat, lon, tilt) {
     return { x: xT + 500, y: -yT + 500, z: z };
 }
 
-// V9.5: Updated to use dynamic Threshold array
 function softUpdate() {
     const shadowOp = state.shadow / 100;
     dom.terminator.setAttribute('opacity', shadowOp);
@@ -1501,34 +1251,58 @@ function softUpdate() {
     grad.innerHTML = `<stop offset="50%" stop-color="#050508" stop-opacity="0"/><stop offset="100%" stop-color="#050508" stop-opacity="${shadowOp}"/>`;
     dom.defs.appendChild(grad);
 
-    dom.gClouds.style.display = (state.cloudsEnabled) ? 'block' : 'none';
+    dom.gCloudsRotator.style.display = (state.cloudsEnabled) ? 'block' : 'none';
 
     const waterFactor = state.waterLevel / 100;
-
     const updateFilterIntercept = (id, val) => {
         const filter = document.getElementById(id);
         if(!filter) return;
         const funcs = filter.querySelectorAll('feFuncR, feFuncG, feFuncB');
         funcs.forEach(f => f.setAttribute('intercept', val));
     };
-
-    // Update Terrain Layers based on stored non-linear thresholds
     if (state.layerThresholds && state.layerThresholds.length) {
         state.layerThresholds.forEach((baseLevel, i) => {
-            // Offset logic: Shifting the sea level slider effectively raises/lowers the terrain
             const offset = (waterFactor - 0.5) * 1.5; 
             const target = baseLevel + offset;
-            // Slope matches creation (60)
             updateFilterIntercept(`thresh-layer-${i}`, -(target * 60));
         });
     }
-
     const slope = 120;
     const lMaskThreshId = `thresh-mask-liquid-final-${state.seed}`;
     updateFilterIntercept(lMaskThreshId, (waterFactor * slope) + 0.5);
-
     const landMaskThreshId = `thresh-mask-land-only-${state.seed}`;
     updateFilterIntercept(landMaskThreshId, -(waterFactor * 50) + 0.5);
+
+    // --- SEAMLESS ROTATION UPDATE ---
+    const rot = state.rotation;
+    
+    // 1. Noise Filter Offset: 360deg = 1000px
+    // Using simple modulo logic handled by SVG pattern tiling
+    const pixelOffset = (rot / 360) * 1000;
+    const noiseOffset = document.getElementById(`filter-offset-${state.seed}`);
+    if (noiseOffset) {
+        noiseOffset.setAttribute("dx", -pixelOffset); 
+    }
+
+    // 2. Vector Wrappers (Geo & Clouds)
+    // We translate the wrapper group containing {Left, Center, Right} clones.
+    // As we scroll -1000px, the Right clone moves into Center, Center moves to Left.
+    // We use modulo to reset the position silently for infinite scrolling feeling.
+    // Since we have a buffer of 1000px on both sides, we can just let it slide.
+    // But to keep numbers small:
+    const vectorTranslate = -((rot / 360) * 1000) % 1000; 
+    
+    // Note: Since we have Left(-1000), Center(0), Right(1000)...
+    // If we translate by -500, we see Center at -500 and Right at 500. Correct.
+    // If we translate by -1000, we see Center at -1000 and Right at 0.
+    // At this exact moment (-1000), "Right" looks exactly like "Center" did at 0.
+    // So modulo logic holds.
+    
+    const geoWrap = document.getElementById('geo-wrapper');
+    if (geoWrap) geoWrap.setAttribute("transform", `translate(${vectorTranslate}, 0)`);
+    
+    const cloudWrap = document.getElementById('cloud-wrapper');
+    if (cloudWrap) cloudWrap.setAttribute("transform", `translate(${vectorTranslate}, 0)`);
 }
 
 window.onload = () => {
@@ -1545,7 +1319,7 @@ window.onload = () => {
     const triggerRebuild = () => {
         state.seed = dom.seedInput.value.toUpperCase();
         state.waterLevel = parseInt(dom.rngWater.value);
-        state.lensStrength = parseInt(dom.rngLens.value);
+        state.rotation = parseInt(dom.rngRotation.value);
         state.shadow = parseInt(dom.rngShadow.value);
         state.cloudsEnabled = dom.chkClouds.checked;
         fullRebuild();
@@ -1560,17 +1334,10 @@ window.onload = () => {
         softUpdate();
     };
 
-    const handleLens = () => {
-        state.lensStrength = parseInt(dom.rngLens.value);
-        dom.lblLens.innerText = state.lensStrength;
-        
-        // Native SVG fix: simply update the displacement scale
-        const lensScale = state.lensStrength * 0.2;
-        const dispMaster = document.getElementById('disp-master');
-        const dispClouds = document.getElementById('disp-clouds');
-        
-        if (dispMaster) dispMaster.setAttribute('scale', lensScale);
-        if (dispClouds) dispClouds.setAttribute('scale', lensScale * 0.15);
+    const handleRotation = () => {
+        state.rotation = parseInt(dom.rngRotation.value);
+        dom.lblRotation.innerText = state.rotation + '°';
+        softUpdate();
     }
 
     dom.btnRnd.addEventListener('click', () => {
@@ -1588,7 +1355,7 @@ window.onload = () => {
     dom.rngWater.addEventListener('input', handleManualUpdate);
     dom.rngShadow.addEventListener('input', () => { state.shadow = parseInt(dom.rngShadow.value); softUpdate(); });
     dom.chkClouds.addEventListener('change', () => { state.cloudsEnabled = dom.chkClouds.checked; softUpdate(); });
-    dom.rngLens.addEventListener('input', handleLens);
+    dom.rngRotation.addEventListener('input', handleRotation);
 
     dom.btnDownload.addEventListener('click', () => {
         const svgData = dom.svg.outerHTML;
@@ -1596,7 +1363,7 @@ window.onload = () => {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `FORGE_V9_${state.seed}.svg`;
+        link.download = `FORGE_V10.1_${state.seed}.svg`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

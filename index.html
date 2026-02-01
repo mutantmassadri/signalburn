@@ -233,39 +233,62 @@
         
         <svg id="render-target" viewBox="-200 -200 1400 1400" xmlns="http://www.w3.org/2000/svg">
             <defs>
+                <!-- Native SVG Lens Generation (Fixes iOS Canvas Crash) -->
+                <linearGradient id="grad-u">
+                    <stop offset="0%" stop-color="#000" />
+                    <stop offset="100%" stop-color="#f00" />
+                </linearGradient>
+                <linearGradient id="grad-v" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="#000" />
+                    <stop offset="100%" stop-color="#0f0" />
+                </linearGradient>
+                <radialGradient id="grad-center-mask">
+                    <stop offset="0%" stop-color="#fff" />
+                    <stop offset="100%" stop-color="#888" />
+                </radialGradient>
+                <mask id="lens-mask">
+                    <rect width="100%" height="100%" fill="url(#grad-center-mask)" />
+                </mask>
+                
+                <g id="lens-source">
+                    <rect width="100%" height="100%" fill="#808080" />
+                    <rect width="100%" height="100%" fill="url(#grad-u)" style="mix-blend-mode: screen" mask="url(#lens-mask)"/>
+                    <rect width="100%" height="100%" fill="url(#grad-v)" style="mix-blend-mode: screen" mask="url(#lens-mask)"/>
+                </g>
+
                 <clipPath id="planet-clip">
                     <circle cx="500" cy="500" r="450" />
                 </clipPath>
 
-                <filter id="geo-blur" x="-20%" y="-20%" width="140%" height="140%">
+                <filter id="geo-blur" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
                     <feGaussianBlur stdDeviation="25" />
                 </filter>
 
-                <filter id="liquid-blur" x="-20%" y="-20%" width="140%" height="140%">
+                <filter id="liquid-blur" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
                     <feGaussianBlur stdDeviation="1" />
                 </filter>
                 
-                <filter id="geo-warp" x="-20%" y="-20%" width="140%" height="140%">
+                <filter id="geo-warp" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
                     <feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves="3" result="warpNoise"/>
                     <feDisplacementMap in2="warpNoise" in="SourceGraphic" scale="35" xChannelSelector="R" yChannelSelector="G"/>
                 </filter>
 
-                <filter id="zone-warp" x="-20%" y="-20%" width="140%" height="140%">
+                <filter id="zone-warp" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
                      <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="4" seed="123" result="turb"/>
                      <feDisplacementMap in="SourceGraphic" in2="turb" scale="60" xChannelSelector="R" yChannelSelector="G"/>
                      <feGaussianBlur stdDeviation="10" />
                 </filter>
 
-                <filter id="ice-noise" x="-20%" y="-20%" width="140%" height="140%">
+                <filter id="ice-noise" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
                      <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="4" seed="500" result="frost"/>
                      <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.4 0" />
                 </filter>
                 
-                <filter id="soft-atmos">
+                <filter id="soft-atmos" color-interpolation-filters="sRGB">
                     <feGaussianBlur stdDeviation="30" />
                 </filter>
 
-                <filter id="blur-shadow">
+                <filter id="blur-shadow" color-interpolation-filters="sRGB">
                     <feGaussianBlur stdDeviation="20" />
                 </filter>
             </defs>
@@ -520,27 +543,10 @@ const dom = {
     valLife: document.getElementById('val-life'),
 };
 
-// --- 5. LENS GENERATOR ---
-function createLensDataURI(strength) {
-    const size = 256; 
-    const cvs = document.createElement('canvas');
-    cvs.width = size; cvs.height = size;
-    const ctx = cvs.getContext('2d');
-    const imgData = ctx.createImageData(size, size);
-    for(let y=0; y<size; y++) {
-        for(let x=0; x<size; x++) {
-            let nx = (x / size) * 2 - 1, ny = (y / size) * 2 - 1;
-            let d = Math.sqrt(nx*nx + ny*ny);
-            let r = 127 + (nx * d * strength); 
-            let g = 127 + (ny * d * strength);
-            r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g));
-            const i = (y*size + x) * 4;
-            imgData.data[i] = r; imgData.data[i+1] = g; imgData.data[i+2] = 0; imgData.data[i+3] = 255;
-        }
-    }
-    ctx.putImageData(imgData, 0, 0);
-    return cvs.toDataURL();
-}
+// --- 5. LENS GENERATOR REPLACED BY NATIVE SVG ---
+// The manual Canvas generation caused crashes on iOS/Safari due to large Data URI injection.
+// We now use #lens-source defined in <defs> via SVG gradients.
+// The strength slider now controls the scale of the displacement map.
 
 // --- 6. CORE LOGIC ---
 
@@ -731,7 +737,10 @@ function fullRebuild() {
 
     const noiseID = `noise-${state.seed}`;
     const structID = `struct-${state.seed}`;
-    const lensData = createLensDataURI(state.lensStrength);
+    
+    // Scale displacement based on slider state (0-500)
+    // Original max scale was 100.
+    const lensScale = state.lensStrength * 0.2; 
     
     dom.defs.querySelectorAll('.dynamic-def').forEach(el => el.remove());
     dom.gTerrain.innerHTML = '';
@@ -746,12 +755,13 @@ function fullRebuild() {
     masterFilter.setAttribute("id", noiseID);
     masterFilter.setAttribute("x", "-20%"); masterFilter.setAttribute("y", "-20%");
     masterFilter.setAttribute("width", "140%"); masterFilter.setAttribute("height", "140%");
+    masterFilter.setAttribute("color-interpolation-filters", "sRGB");
     masterFilter.classList.add('dynamic-def');
     
     masterFilter.innerHTML = `
         <feTurbulence type="fractalNoise" baseFrequency="${data.baseFreq}" numOctaves="8" seed="${Math.floor(rng() * 1000)}" result="turb"/>
-        <feImage id="current-lens-map" href="${lensData}" result="lensMap" />
-        <feDisplacementMap in="turb" in2="lensMap" scale="100" xChannelSelector="R" yChannelSelector="G" result="warpedTurb" />
+        <feImage id="current-lens-map" href="#lens-source" result="lensMap" />
+        <feDisplacementMap id="disp-master" in="turb" in2="lensMap" scale="${lensScale}" xChannelSelector="R" yChannelSelector="G" result="warpedTurb" />
         <feColorMatrix type="saturate" values="0" in="warpedTurb" result="bw"/>
         <feComponentTransfer in="bw" result="contrasted">
             <feFuncR type="linear" slope="4" intercept="-1.5"/>
@@ -762,12 +772,13 @@ function fullRebuild() {
     dom.defs.appendChild(masterFilter);
 	
     // --- CLOUD FILTER V9.6 (Smoothed) ---
-    // Reduced displacement scale to prevent "tearing" at hard zone edges
     const cloudFilterID = `cloud-atmos-${state.seed}`;
     const cloudFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     cloudFilter.setAttribute("id", cloudFilterID);
     cloudFilter.setAttribute("x", "-50%"); cloudFilter.setAttribute("y", "-50%");
     cloudFilter.setAttribute("width", "200%"); cloudFilter.setAttribute("height", "200%");
+    cloudFilter.setAttribute("color-interpolation-filters", "sRGB");
+    cloudFilter.classList.add('dynamic-def');
     
 	cloudFilter.innerHTML = `
         <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="5" result="noise"/>
@@ -778,8 +789,8 @@ function fullRebuild() {
             <feFuncA type="linear" slope="5" intercept="-1.5"/> 
         </feComponentTransfer>
         
-        <feImage href="${lensData}" result="lensMap"/>
-        <feDisplacementMap in="clouds" in2="lensMap" scale="15" xChannelSelector="R" yChannelSelector="G" result="finalClouds"/>
+        <feImage href="#lens-source" result="lensMap"/>
+        <feDisplacementMap id="disp-clouds" in="clouds" in2="lensMap" scale="${lensScale * 0.15}" xChannelSelector="R" yChannelSelector="G" result="finalClouds"/>
     `;
     
     dom.defs.appendChild(cloudFilter);
@@ -980,6 +991,7 @@ function createCompositeMask(id, thermalMaskId, noiseId, threshold, invert, slop
     const filter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     filter.setAttribute("id", threshId);
     filter.classList.add('dynamic-def');
+    filter.setAttribute("color-interpolation-filters", "sRGB");
     
     let slope = slopeVal;
     let intercept = -(threshold * slope) + 0.5;
@@ -1060,6 +1072,7 @@ function generateSolidLayers(rng, data, palette, noiseID, structID) {
         const threshID = `thresh-layer-${i}`;
         const threshFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
         threshFilter.setAttribute("id", threshID);
+        threshFilter.setAttribute("color-interpolation-filters", "sRGB");
         threshFilter.classList.add('dynamic-def');
         
         // Jitter: Small random variance to break the perfect bullseye across layers
@@ -1550,9 +1563,14 @@ window.onload = () => {
     const handleLens = () => {
         state.lensStrength = parseInt(dom.rngLens.value);
         dom.lblLens.innerText = state.lensStrength;
-        const newData = createLensDataURI(state.lensStrength);
-        const feImg = document.getElementById('current-lens-map');
-        if(feImg) feImg.setAttribute('href', newData);
+        
+        // Native SVG fix: simply update the displacement scale
+        const lensScale = state.lensStrength * 0.2;
+        const dispMaster = document.getElementById('disp-master');
+        const dispClouds = document.getElementById('disp-clouds');
+        
+        if (dispMaster) dispMaster.setAttribute('scale', lensScale);
+        if (dispClouds) dispClouds.setAttribute('scale', lensScale * 0.15);
     }
 
     dom.btnRnd.addEventListener('click', () => {

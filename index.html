@@ -53,8 +53,7 @@
         }
 
         #render-target {
-            width: 85vmin; height: 85vmin;
-            max-width: 800px; max-height: 800px;
+            width: 95vmin; height: 95vmin;
             z-index: 10;
             filter: drop-shadow(0 0 50px rgba(0,0,0,0.8));
             will-change: transform; 
@@ -187,6 +186,35 @@
         }
         .btn-dl:hover { background: #27272a; }
 
+        /* --- RESPONSIVE LAYOUT --- */
+        @media (max-width: 800px) {
+            body {
+                grid-template-columns: 1fr;
+                grid-template-rows: minmax(0, 1fr) auto;
+                height: 100vh;
+                overflow: hidden;
+            }
+
+            .deck {
+                border-left: none;
+                border-top: 1px solid var(--c-border);
+                box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+                max-height: 45vh;
+                overflow-y: auto;
+            }
+
+            #render-target {
+                width: 90vmin;
+                height: 90vmin;
+            }
+
+            .dl-group {
+                margin-top: 12px;
+                padding-top: 12px;
+                padding-bottom: 12px;
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -194,7 +222,7 @@
     <div class="stage" id="stage">
         <div class="stars" id="starfield"></div>
         
-        <svg id="render-target" viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg">
+        <svg id="render-target" viewBox="-200 -200 1400 1400" xmlns="http://www.w3.org/2000/svg">
             <defs>
                 <clipPath id="planet-clip">
                     <circle cx="500" cy="500" r="450" />
@@ -264,7 +292,7 @@
 
     <div class="deck">
         <div class="deck-header">
-            <h1>Celestial Forge <span class="version">V9.6</span></h1>
+            <h1>SB PLANETGEN <span class="version">V9.6</span></h1>
             <div class="seed-row">
                 <input type="text" id="seed-input" value="AQUA-VITA">
                 <button class="btn-icon" id="btn-rnd" title="Randomize">🎲</button>
@@ -321,7 +349,7 @@
                 </div>
             </div>
             
-            <button class="btn-action" id="btn-gen">Simulate System</button>
+            <button class="btn-action" id="btn-gen">Update View</button>
 
         </div>
 
@@ -335,7 +363,7 @@
 
 <script>
 /**
- * CELESTIAL FORGE V9.6 - CLOUD CLUSTERS
+ * SB PLANETGEN V9.6 - CLOUD CLUSTERS
  */
 
 // --- 1. REFINED DATABASES ---

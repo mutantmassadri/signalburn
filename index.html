@@ -1,9 +1,9 @@
-
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SB PLANETGEN V10.3 - FIXED (iOS)</title>
+    <title>SB PLANETGEN V10.3 - IPHONE FIXED</title>
     <style>
         /* --- CORE VISUALS --- */
         :root {
@@ -263,10 +263,13 @@
 
             <g id="planet-sphere" clip-path="url(#planet-clip)">
                 
+                <!-- The Tilt Group rotates the axis of the planet -->
                 <g id="planet-axis-group">
                     
+                    <!-- The Lens Container applies 3D spherical distortion -->
                     <g id="planet-lens-container">
                         
+                        <!-- The Surface Slider moves horizontally for rotation -->
                         <g id="planet-surface-slider">
                             <g id="group-terrain"></g>
                             <g id="group-liquid"></g>
@@ -277,6 +280,7 @@
                         
                     </g>
                     
+                    <!-- Clouds rotate separately -->
                     <g id="layer-clouds-rotator"></g>
 
                 </g>
@@ -366,10 +370,11 @@
 
 <script>
 /**
- * SB PLANETGEN V10.3 - QUALITY + iPHONE FIX (Refined)
- * - Fixed iOS/WebKit terrain delineation issue by enforcing sRGB color interpolation
- * - Maintains sliding texture performance
- * - Full terrain quality restored
+ * SB PLANETGEN V10.3 - IPHONE/WEBKIT COMPATIBILITY FIX
+ * - Forces sRGB Color Interpolation filters to align Gamma curves between Chrome/Safari.
+ * - Adds explicit Alpha Normalization (setting Alpha to 1.0) after turbulence generation.
+ *   This prevents Safari from performing math on Premultiplied Alpha values which caused
+ *   terrain offsets and color washing.
  */
 
 const LIQUIDS = [
@@ -681,7 +686,7 @@ function fullRebuild() {
     lensFilter.setAttribute("width", "1000"); 
     lensFilter.setAttribute("height", "1000");
     lensFilter.setAttribute("filterUnits", "userSpaceOnUse");
-    lensFilter.setAttribute("color-interpolation-filters", "sRGB"); // iOS FIX
+    lensFilter.setAttribute("color-interpolation-filters", "sRGB"); // FORCE sRGB
     lensFilter.classList.add('dynamic-def');
     
     lensFilter.innerHTML = `
@@ -698,14 +703,17 @@ function fullRebuild() {
     masterFilter.setAttribute("y", "0%");
     masterFilter.setAttribute("width", "100%"); 
     masterFilter.setAttribute("height", "100%");
-    masterFilter.setAttribute("color-interpolation-filters", "sRGB"); // iOS FIX
+    masterFilter.setAttribute("color-interpolation-filters", "sRGB"); // FORCE sRGB
     masterFilter.classList.add('dynamic-def');
     
     masterFilter.innerHTML = `
         <feTurbulence type="fractalNoise" baseFrequency="${data.baseFreq}" numOctaves="8" seed="${Math.floor(rng() * 1000)}" 
             stitchTiles="stitch" width="1000" height="1000" result="turb"/>
         <feTile in="turb" result="tiledTurb"/>
-        <feColorMatrix type="saturate" values="0" in="tiledTurb" result="bw"/>
+        <feColorMatrix type="saturate" values="0" in="tiledTurb" result="gray"/>
+        <!-- IPHONE FIX: Explicitly set Alpha to 1.0 to prevent pre-multiplication math errors in WebKit -->
+        <feColorMatrix in="gray" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0 1" result="bw"/>
+        
         <feComponentTransfer in="bw" result="contrasted">
             <feFuncR type="linear" slope="4" intercept="-1.5"/>
             <feFuncG type="linear" slope="4" intercept="-1.5"/>
@@ -723,7 +731,7 @@ function fullRebuild() {
     cloudFilter.setAttribute("width", "1000"); 
     cloudFilter.setAttribute("height", "1000");
     cloudFilter.setAttribute("filterUnits", "userSpaceOnUse");
-    cloudFilter.setAttribute("color-interpolation-filters", "sRGB"); // iOS FIX
+    cloudFilter.setAttribute("color-interpolation-filters", "sRGB"); // FORCE sRGB
     cloudFilter.classList.add('dynamic-def');
     
 	cloudFilter.innerHTML = `
@@ -908,7 +916,7 @@ function createCompositeMask(id, thermalMaskId, noiseId, threshold, invert, slop
     const threshId = `thresh-${id}`;
     const filter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     filter.setAttribute("id", threshId);
-    filter.setAttribute("color-interpolation-filters", "sRGB"); // iOS FIX
+    filter.setAttribute("color-interpolation-filters", "sRGB"); // FORCE sRGB
     filter.classList.add('dynamic-def');
     let slope = slopeVal, intercept = -(threshold * slope) + 0.5;
     if (invert) { slope = -slopeVal; intercept = (threshold * slopeVal) + 0.5; }
@@ -954,7 +962,7 @@ function generateSolidLayers(rng, data, palette, noiseID) {
         const threshID = `thresh-layer-${i}`;
         const threshFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
         threshFilter.setAttribute("id", threshID);
-        threshFilter.setAttribute("color-interpolation-filters", "sRGB"); // iOS FIX
+        threshFilter.setAttribute("color-interpolation-filters", "sRGB"); // FORCE sRGB
         threshFilter.classList.add('dynamic-def');
         const jitter = (rng() * 0.04) - 0.02;
         const level = Math.max(0, Math.min(1, normalizedStops[i] + jitter));

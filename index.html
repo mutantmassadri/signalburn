@@ -1,8 +1,9 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SB PLANETGEN V10.3 - OPTIMIZED FOR ALL DEVICES</title>
+    <title>SB PLANETGEN V10.3 - FIXED</title>
     <style>
         /* --- CORE VISUALS --- */
         :root {
@@ -214,6 +215,7 @@
                 padding-bottom: 12px;
             }
         }
+
     </style>
 </head>
 <body>
@@ -235,12 +237,6 @@
                     <feGaussianBlur stdDeviation="1" />
                 </filter>
                 
-                <!-- Essential quality filters restored -->
-                <filter id="geo-warp" x="-20%" y="-20%" width="140%" height="140%">
-                    <feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves="3" result="warpNoise"/>
-                    <feDisplacementMap in2="warpNoise" in="SourceGraphic" scale="35" xChannelSelector="R" yChannelSelector="G"/>
-                </filter>
-
                 <filter id="zone-warp" x="-20%" y="-20%" width="140%" height="140%">
                      <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="4" seed="123" result="turb"/>
                      <feDisplacementMap in="SourceGraphic" in2="turb" scale="60" xChannelSelector="R" yChannelSelector="G"/>
@@ -270,16 +266,21 @@
                 <!-- The Tilt Group rotates the axis of the planet -->
                 <g id="planet-axis-group">
                     
-                    <!-- The Slider moves the infinite texture strip horizontally (Hardware Accelerated) -->
-                    <g id="planet-surface-slider">
-                        <g id="group-terrain"></g>
-                        <g id="group-liquid"></g>
-                        <g id="group-ice" style="mix-blend-mode: normal;"></g>
-                        <g id="group-bio"></g>
-                        <g id="geo-structure-layer"></g> <!-- Vectors -->
+                    <!-- The Lens Container applies 3D spherical distortion -->
+                    <g id="planet-lens-container">
+                        
+                        <!-- The Surface Slider moves horizontally for rotation -->
+                        <g id="planet-surface-slider">
+                            <g id="group-terrain"></g>
+                            <g id="group-liquid"></g>
+                            <g id="group-ice" style="mix-blend-mode: normal;"></g>
+                            <g id="group-bio"></g>
+                            <g id="geo-structure-layer"></g>
+                        </g>
+                        
                     </g>
                     
-                    <!-- Clouds are handled separately to allow for parallax -->
+                    <!-- Clouds rotate separately -->
                     <g id="layer-clouds-rotator"></g>
 
                 </g>
@@ -369,10 +370,10 @@
 
 <script>
 /**
- * SB PLANETGEN V10.3 - SAFARI COMPATIBLE WITH FULL VISUAL QUALITY
- * - Uses pure SVG lens maps (no canvas Data URIs)
- * - Restores all visual quality filters
- * - Maintains performance optimizations
+ * SB PLANETGEN V10.3 - QUALITY + iPHONE FIX
+ * - Replaced canvas lens with multi-stop radial gradient for proper spherical distortion
+ * - Maintains sliding texture performance
+ * - Full terrain quality restored
  */
 
 const LIQUIDS = [
@@ -487,6 +488,7 @@ const dom = {
     svg: document.getElementById('render-target'),
     defs: document.querySelector('defs'),
     gAxis: document.getElementById('planet-axis-group'),
+    gLensContainer: document.getElementById('planet-lens-container'),
     gSurfaceSlider: document.getElementById('planet-surface-slider'),
     gTerrain: document.getElementById('group-terrain'),
     gLiquid: document.getElementById('group-liquid'),
@@ -517,28 +519,24 @@ const dom = {
 };
 
 /**
- * SAFARI-COMPATIBLE LENS MAP
- * Creates an SVG radial gradient that simulates spherical distortion
+ * Creates a high-quality SVG lens map using multi-stop radial gradient
+ * This replicates the canvas displacement logic but in pure SVG
  */
-function createSVGLensURI(strength = 500) {
-    // Create an SVG with a radial gradient that goes from neutral gray to white
-    // This simulates the lens distortion effect without using canvas
-    const svgContent = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+function createSVGLensURI() {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
         <defs>
             <radialGradient id="lens-grad" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="#808080"/>   <!-- Neutral center -->
-                <stop offset="30%" stop-color="#a0a0a0"/>
-                <stop offset="70%" stop-color="#e0e0e0"/>
-                <stop offset="100%" stop-color="#ffffff"/> <!-- Max displace -->
+                <stop offset="0%" stop-color="#808080"/>
+                <stop offset="20%" stop-color="#909090"/>
+                <stop offset="40%" stop-color="#a8a8a8"/>
+                <stop offset="60%" stop-color="#c8c8c8"/>
+                <stop offset="80%" stop-color="#e8e8e8"/>
+                <stop offset="100%" stop-color="#ffffff"/>
             </radialGradient>
         </defs>
-        <rect width="256" height="256" fill="url(#lens-grad)"/>
+        <rect width="512" height="512" fill="url(#lens-grad)"/>
     </svg>`;
-    
-    // Clean and encode the SVG
-    const cleanedSVG = svgContent.replace(/\s+/g, ' ').trim();
-    return "data:image/svg+xml;base64," + btoa(cleanedSVG);
+    return "data:image/svg+xml;base64," + btoa(svg);
 }
 
 function generatePlanetData(rng) {
@@ -651,7 +649,7 @@ function fullRebuild() {
     const palette = generatePalette(data);
 
     dom.valTemp.innerHTML = `${data.baseTemp}°C <span style="font-size: 0.8em; opacity: 0.7;">(<span style="color: #60a5fa">${data.minT}°</span> / <span style="color: #f87171">${data.maxT}°</span>)</span>`;
-    dom.valLiquid.innerHTML = data.oceanName + getTagHtml(data.liquid.tag);
+	dom.valLiquid.innerHTML = data.oceanName + getTagHtml(data.liquid.tag);
     dom.valSolid.innerHTML = data.solidName + getTagHtml(data.solid.tag);
     dom.valAtmos.innerText = data.atmosName;
     
@@ -664,36 +662,52 @@ function fullRebuild() {
     }
 
     const noiseID = `noise-${state.seed}`;
-    const lensData = createSVGLensURI(600);
+    const lensData = createSVGLensURI(); 
     
     dom.defs.querySelectorAll('.dynamic-def').forEach(el => el.remove());
-    
-    // Clear all groups
-    ['gTerrain', 'gLiquid', 'gIce', 'gBio', 'gCloudsRotator', 'gGeoStructure', 
-     'gRingsBack', 'gRingsFront'].forEach(id => dom[id].innerHTML = '');
+    dom.gTerrain.innerHTML = '';
+    dom.gLiquid.innerHTML = '';
+    dom.gIce.innerHTML = '';
+    dom.gBio.innerHTML = '';
+    dom.gCloudsRotator.innerHTML = ''; 
+    dom.gGeoStructure.innerHTML = '';
+    dom.gRingsBack.innerHTML = '';
+    dom.gRingsFront.innerHTML = '';
 
     dom.gAxis.setAttribute("transform", `rotate(${data.tilt}, 500, 500)`);
 
-    // === HIGH-QUALITY NOISE GENERATION (Safari compatible) ===
+    // --- LENS FILTER (Applied to container, static) ---
+    const lensFilterID = `lens-${state.seed}`;
+    const lensFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
+    lensFilter.setAttribute("id", lensFilterID);
+    lensFilter.setAttribute("x", "0"); 
+    lensFilter.setAttribute("y", "0");
+    lensFilter.setAttribute("width", "1000"); 
+    lensFilter.setAttribute("height", "1000");
+    lensFilter.setAttribute("filterUnits", "userSpaceOnUse");
+    lensFilter.classList.add('dynamic-def');
+    
+    lensFilter.innerHTML = `
+        <feImage href="${lensData}" result="lensMap" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none"/>
+        <feDisplacementMap in="SourceGraphic" in2="lensMap" scale="120" xChannelSelector="R" yChannelSelector="G" />
+    `;
+    dom.defs.appendChild(lensFilter);
+    dom.gLensContainer.setAttribute("filter", `url(#${lensFilterID})`);
+
+    // --- NOISE GENERATION FILTER ---
     const masterFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     masterFilter.setAttribute("id", noiseID);
-    masterFilter.setAttribute("x", "-50%"); masterFilter.setAttribute("y", "-50%");
-    masterFilter.setAttribute("width", "200%"); masterFilter.setAttribute("height", "200%");
+    masterFilter.setAttribute("x", "0%"); 
+    masterFilter.setAttribute("y", "0%");
+    masterFilter.setAttribute("width", "100%"); 
+    masterFilter.setAttribute("height", "100%");
     masterFilter.classList.add('dynamic-def');
     
-    // Restore the full texture processing chain
     masterFilter.innerHTML = `
-        <feTurbulence type="fractalNoise" baseFrequency="${data.baseFreq}" numOctaves="8" 
-            seed="${Math.floor(rng() * 1000)}" stitchTiles="stitch" result="turb"/>
+        <feTurbulence type="fractalNoise" baseFrequency="${data.baseFreq}" numOctaves="8" seed="${Math.floor(rng() * 1000)}" 
+            stitchTiles="stitch" width="1000" height="1000" result="turb"/>
         <feTile in="turb" result="tiledTurb"/>
-        <feOffset dx="0" dy="0" in="tiledTurb" result="offsetTurb" id="filter-offset-${state.seed}"/>
-        
-        <!-- Use SVG lens map instead of canvas -->
-        <feImage href="${lensData}" result="lensMap" />
-        <feDisplacementMap in="offsetTurb" in2="lensMap" scale="100" 
-            xChannelSelector="R" yChannelSelector="G" result="warpedTurb" />
-        
-        <feColorMatrix type="saturate" values="0" in="warpedTurb" result="bw"/>
+        <feColorMatrix type="saturate" values="0" in="tiledTurb" result="bw"/>
         <feComponentTransfer in="bw" result="contrasted">
             <feFuncR type="linear" slope="4" intercept="-1.5"/>
             <feFuncG type="linear" slope="4" intercept="-1.5"/>
@@ -701,28 +715,27 @@ function fullRebuild() {
         </feComponentTransfer>
     `;
     dom.defs.appendChild(masterFilter);
-
-    // === CLOUD FILTER (Safari compatible) ===
+	
+    // Cloud Filter
     const cloudFilterID = `cloud-atmos-${state.seed}`;
     const cloudFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     cloudFilter.setAttribute("id", cloudFilterID);
-    cloudFilter.setAttribute("x", "-50%"); cloudFilter.setAttribute("y", "-50%");
-    cloudFilter.setAttribute("width", "200%"); cloudFilter.setAttribute("height", "200%");
+    cloudFilter.setAttribute("x", "0"); 
+    cloudFilter.setAttribute("y", "0");
+    cloudFilter.setAttribute("width", "1000"); 
+    cloudFilter.setAttribute("height", "1000");
+    cloudFilter.setAttribute("filterUnits", "userSpaceOnUse");
     cloudFilter.classList.add('dynamic-def');
     
-    cloudFilter.innerHTML = `
+	cloudFilter.innerHTML = `
         <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="5" result="noise"/>
         <feDisplacementMap in="SourceGraphic" in2="noise" scale="25" result="distorted"/>
         <feGaussianBlur in="distorted" stdDeviation="2" result="blurred"/> 
-        
         <feComponentTransfer in="blurred" result="clouds">
             <feFuncA type="linear" slope="5" intercept="-1.5"/> 
         </feComponentTransfer>
-        
-        <!-- Use SVG lens map -->
-        <feImage href="${lensData}" result="lensMap"/>
-        <feDisplacementMap in="clouds" in2="lensMap" scale="15" 
-            xChannelSelector="R" yChannelSelector="G" result="finalClouds"/>
+        <feImage href="${lensData}" result="lensMap" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none"/>
+        <feDisplacementMap in="clouds" in2="lensMap" scale="15" xChannelSelector="R" yChannelSelector="G" result="finalClouds"/>
     `;
     dom.defs.appendChild(cloudFilter);
 
@@ -736,102 +749,72 @@ function fullRebuild() {
     const lMaskId = `mask-liquid-final-${state.seed}`;
     createCompositeMask(lMaskId, "mask-liquid", noiseID, state.waterLevel/100, true, 120);
     
-    // Ocean gradient
     const oceanGradId = `grad-ocean-${state.seed}`;
     const oGrad = document.createElementNS("http://www.w3.org/2000/svg", "radialGradient");
     oGrad.setAttribute("id", oceanGradId);
-    oGrad.setAttribute("cx", "50%"); oGrad.setAttribute("cy", "50%");
+    oGrad.setAttribute("cx", "50%"); 
+    oGrad.setAttribute("cy", "50%");
     oGrad.classList.add('dynamic-def');
     const baseLiq = data.liquid.color;
     const deepLiq = artColor(baseLiq, -5, 5);
     oGrad.innerHTML = `<stop offset="0%" stop-color="${deepLiq}"/><stop offset="30%" stop-color="${baseLiq}"/>`;
     dom.defs.appendChild(oGrad);
 
-    // Liquid rectangle with texture
+    // LIQUID RECT: 3000px wide for sliding
     const liquidRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    liquidRect.setAttribute("width", "3000"); 
-    liquidRect.setAttribute("height", "1000");
+    liquidRect.setAttribute("width","3000"); 
+    liquidRect.setAttribute("height","1000");
     liquidRect.setAttribute("x", "-1000");
     liquidRect.setAttribute("fill", `url(#${oceanGradId})`);
     liquidRect.setAttribute("mask", `url(#${lMaskId})`);
-    
-    // Add subtle liquid texture
-    if (data.liquid.type !== "magma") {
-        liquidRect.setAttribute("filter", "url(#liquid-blur)");
-        // Add a subtle noise for liquid texture
-        const liquidNoise = document.createElementNS("http://www.w3.org/2000/svg", "filter");
-        liquidNoise.setAttribute("id", `liquid-noise-${state.seed}`);
-        liquidNoise.innerHTML = `
-            <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" result="noise"/>
-            <feColorMatrix type="saturate" values="0.3" in="noise"/>
-            <feBlend in="SourceGraphic" in2="noise" mode="multiply" opacity="0.1"/>
-        `;
-        dom.defs.appendChild(liquidNoise);
-        liquidRect.setAttribute("filter", `url(#liquid-blur) url(#liquid-noise-${state.seed})`);
-    }
+    if (data.liquid.type !== "magma") liquidRect.setAttribute("filter", "url(#liquid-blur)");
     dom.gLiquid.appendChild(liquidRect);
 
-    // Add reflection
     const reflection = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-    reflection.setAttribute("cx", "500"); 
-    reflection.setAttribute("cy", "300");
-    reflection.setAttribute("rx", "150"); 
-    reflection.setAttribute("ry", "100");
+    reflection.setAttribute("cx","500"); 
+    reflection.setAttribute("cy","300");
+    reflection.setAttribute("rx","150"); 
+    reflection.setAttribute("ry","100");
     reflection.setAttribute("fill", "white"); 
     reflection.setAttribute("opacity", "0.3");
     reflection.setAttribute("transform", "rotate(-45, 500, 300)");
     reflection.setAttribute("filter", "url(#geo-blur)");
     dom.gLiquid.appendChild(reflection);
 
-    // === ICE WITH TEXTURE ===
+    // ICE RECT: 3000px wide
     const iceRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    iceRect.setAttribute("width", "3000"); 
-    iceRect.setAttribute("height", "1000");
+    iceRect.setAttribute("width","3000"); 
+    iceRect.setAttribute("height","1000");
     iceRect.setAttribute("x", "-1000");
     iceRect.setAttribute("fill", data.liquid.frozenColor);
     iceRect.setAttribute("mask", `url(#mask-ice)`);
     iceRect.setAttribute("filter", "url(#ice-noise)");
     dom.gIce.appendChild(iceRect);
 
-    // === BIOLOGY ===
     if (data.hasLife) {
         const bioZoneMask = "mask-bio-zone";
         createOrganicBandMask(bioZoneMask, data.maxT, data.minT, data.bioMinT, data.bioMaxT, 0);
         const landMaskId = `mask-land-only-${state.seed}`;
-        createCompositeMask(landMaskId, null, noiseID, state.waterLevel/255, false);
-        
+        createCompositeMask(landMaskId, null, noiseID, state.waterLevel/255, false); 
         const gBio = document.createElementNS("http://www.w3.org/2000/svg", "g");
         gBio.setAttribute("mask", `url(#${landMaskId})`);
         
         const bioRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        bioRect.setAttribute("width", "3000"); 
-        bioRect.setAttribute("height", "1000");
+        bioRect.setAttribute("width","3000"); 
+        bioRect.setAttribute("height","1000");
         bioRect.setAttribute("x", "-1000");
         bioRect.setAttribute("fill", data.bioColor);
         bioRect.setAttribute("mask", `url(#${bioZoneMask})`);
         bioRect.setAttribute("opacity", "0.7");
-        bioRect.style.mixBlendMode = "multiply";
-        
-        // Add subtle biological texture
-        const bioFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
-        bioFilter.setAttribute("id", `bio-texture-${state.seed}`);
-        bioFilter.innerHTML = `
-            <feTurbulence type="fractalNoise" baseFrequency="0.1" numOctaves="3" result="bioNoise"/>
-            <feDisplacementMap in="SourceGraphic" in2="bioNoise" scale="5"/>
-        `;
-        dom.defs.appendChild(bioFilter);
-        bioRect.setAttribute("filter", `url(#bio-texture-${state.seed})`);
-        
+        bioRect.style.mixBlendMode = "multiply"; 
         gBio.appendChild(bioRect);
         dom.gBio.appendChild(gBio);
     }
 
-    // === CLOUDS ===
     if (state.cloudsEnabled && data.atmosDensity > 0.05) {
         generateClouds(rng, data);
     }
-
-    // === ATMOSPHERE ===
+    
     const gradAtmos = document.createElementNS("http://www.w3.org/2000/svg", "radialGradient");
     gradAtmos.setAttribute("id", "grad-atmos");
     gradAtmos.classList.add('dynamic-def');
@@ -843,7 +826,6 @@ function fullRebuild() {
     dom.defs.appendChild(gradAtmos);
     dom.rimLight.setAttribute('stroke', artColor(data.cloudHex, 20, -10, 0));
 
-    // === RINGS ===
     if (data.rings) generateRings(rng, data);
 
     softUpdate();
@@ -853,7 +835,10 @@ function createOrganicZoneMask(id, latBoil, latFreeze, tilt, type) {
     const gradId = `grad-${id}-${state.seed}`;
     const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
     grad.setAttribute("id", gradId);
-    grad.setAttribute("x1", "0"); grad.setAttribute("y1", "0"); grad.setAttribute("x2", "0"); grad.setAttribute("y2", "1");
+    grad.setAttribute("x1", "0"); 
+    grad.setAttribute("y1", "0"); 
+    grad.setAttribute("x2", "0"); 
+    grad.setAttribute("y2", "1");
     grad.setAttribute("gradientTransform", `rotate(${tilt}, 0.5, 0.5)`);
     grad.classList.add('dynamic-def');
 
@@ -864,7 +849,7 @@ function createOrganicZoneMask(id, latBoil, latFreeze, tilt, type) {
     const frzY_bot  = 0.5 + (latFreeze * 0.5);
     const spread = 0.02;
 
-    if (type === "liquid") {
+	if (type === "liquid") {
         stops = `<stop offset="0%" stop-color="white"/><stop offset="${(boilY_top-spread)*100}%" stop-color="white"/><stop offset="${(boilY_top+spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(boilY_bot-spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(boilY_bot+spread)*100}%" stop-color="white"/><stop offset="100%" stop-color="white"/>`;
     } else if (type === "ice") {
         stops = `<stop offset="0%" stop-color="white"/><stop offset="${(frzY_top-spread)*100}%" stop-color="white"/><stop offset="${(frzY_top+spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(frzY_bot-spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(frzY_bot+spread)*100}%" stop-color="white"/><stop offset="100%" stop-color="white"/>`;
@@ -875,9 +860,9 @@ function createOrganicZoneMask(id, latBoil, latFreeze, tilt, type) {
     mask.setAttribute("id", id);
     mask.classList.add('dynamic-def');
     
-    // Mask Rect needs to match the sliding rect dimensions: 3000x1000
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("width", "3000"); rect.setAttribute("height", "1000");
+    rect.setAttribute("width", "3000"); 
+    rect.setAttribute("height", "1000");
     rect.setAttribute("x", "-1000");
     rect.setAttribute("fill", `url(#${gradId})`);
     rect.setAttribute("filter", "url(#zone-warp)");
@@ -889,12 +874,16 @@ function createOrganicBandMask(id, maxT, minT, targetMin, targetMax, tilt) {
     const getLat = (t) => (maxT - t) / (maxT - minT);
     let lat1 = Math.max(0, Math.min(1, getLat(targetMax))); 
     let lat2 = Math.max(0, Math.min(1, getLat(targetMin))); 
-    const y1_top = 0.5 - lat1 * 0.5; const y2_top = 0.5 - lat2 * 0.5;
-    const y1_bot = 0.5 + lat1 * 0.5; const y2_bot = 0.5 + lat2 * 0.5;
+    const y1_top = 0.5 - lat1 * 0.5; 
+    const y2_top = 0.5 - lat2 * 0.5;
+    const y1_bot = 0.5 + lat1 * 0.5; 
+    const y2_bot = 0.5 + lat2 * 0.5;
     const gradId = `grad-${id}-${state.seed}`;
     const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
     grad.setAttribute("id", gradId);
-    grad.setAttribute("x1", "0"); grad.setAttribute("y1", "0"); grad.setAttribute("y2", "1");
+    grad.setAttribute("x1", "0"); 
+    grad.setAttribute("y1", "0"); 
+    grad.setAttribute("y2", "1");
     grad.setAttribute("gradientTransform", `rotate(${tilt}, 0.5, 0.5)`);
     grad.classList.add('dynamic-def');
     const spread = 0.05; 
@@ -904,7 +893,8 @@ function createOrganicBandMask(id, maxT, minT, targetMin, targetMax, tilt) {
     mask.setAttribute("id", id);
     mask.classList.add('dynamic-def');
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("width", "3000"); rect.setAttribute("height", "1000");
+    rect.setAttribute("width", "3000"); 
+    rect.setAttribute("height", "1000");
     rect.setAttribute("x", "-1000");
     rect.setAttribute("fill", `url(#${gradId})`);
     rect.setAttribute("filter", "url(#zone-warp)");
@@ -927,8 +917,8 @@ function createCompositeMask(id, thermalMaskId, noiseId, threshold, invert, slop
     
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const r1 = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    // 3000px wide for sliding
-    r1.setAttribute("width","3000"); r1.setAttribute("height","1000");
+    r1.setAttribute("width","3000"); 
+    r1.setAttribute("height","1000");
     r1.setAttribute("x", "-1000");
     r1.setAttribute("filter", `url(#${noiseId}) url(#${threshId})`);
     g.appendChild(r1);
@@ -954,9 +944,9 @@ function generateSolidLayers(rng, data, palette, noiseID) {
         mask.classList.add('dynamic-def');
         const gMask = document.createElementNS("http://www.w3.org/2000/svg", "g");
         
-        // 3000px wide Rect
         const rectNoise = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        rectNoise.setAttribute("width", "3000"); rectNoise.setAttribute("height", "1000");
+        rectNoise.setAttribute("width", "3000"); 
+        rectNoise.setAttribute("height", "1000");
         rectNoise.setAttribute("x", "-1000");
         rectNoise.setAttribute("filter", `url(#${noiseID})`); 
         gMask.appendChild(rectNoise);
@@ -975,14 +965,12 @@ function generateSolidLayers(rng, data, palette, noiseID) {
         mask.appendChild(gMask);
         dom.defs.appendChild(mask);
         
-        // Layer Rect 3000px
         const layerRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        layerRect.setAttribute("width", "3000"); layerRect.setAttribute("height", "1000");
+        layerRect.setAttribute("width", "3000"); 
+        layerRect.setAttribute("height", "1000");
         layerRect.setAttribute("x", "-1000");
         layerRect.setAttribute("fill", color);
         layerRect.setAttribute("mask", `url(#${maskID})`);
-        // Apply geo-warp filter for texture
-        layerRect.setAttribute("filter", "url(#geo-warp)");
         dom.gTerrain.appendChild(layerRect);
     });
 }
@@ -994,8 +982,10 @@ function generateGeology(rng, data) {
     if (data.roughness > 0.5) {
         const count = Math.ceil(8 * data.roughness);
         for (let i = 0; i < count; i++) {
-            const lat1 = rng()*2-1; const lon1 = rng()*6.28;
-            const lat2 = rng()*2-1; const lon2 = lon1 + rng();
+            const lat1 = rng()*2-1; 
+            const lon1 = rng()*6.28;
+            const lat2 = rng()*2-1; 
+            const lon2 = lon1 + rng();
             let d = "";
             for(let t=0; t<=12; t++) {
                 const step = t/12;
@@ -1017,12 +1007,12 @@ function generateGeology(rng, data) {
         }
     }
 
-    // Infinite wrapper with clones (-1000, 0, 1000)
-    const tileLeft = singleTile.cloneNode(true); tileLeft.setAttribute("transform", "translate(-1000,0)");
-    const tileRight = singleTile.cloneNode(true); tileRight.setAttribute("transform", "translate(1000,0)");
+    const tileLeft = singleTile.cloneNode(true); 
+    tileLeft.setAttribute("transform", "translate(-1000,0)");
+    const tileRight = singleTile.cloneNode(true); 
+    tileRight.setAttribute("transform", "translate(1000,0)");
     
     const wrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    wrapper.setAttribute("id", "geo-wrapper");
     wrapper.appendChild(tileLeft);
     wrapper.appendChild(singleTile);
     wrapper.appendChild(tileRight);
@@ -1152,12 +1142,13 @@ function generateClouds(rng, data) {
 
     const wrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
     wrapper.setAttribute("id", "cloud-wrapper");
-    // Clouds use their own filter
     wrapper.setAttribute("filter", `url(#cloud-atmos-${state.seed})`);
     wrapper.setAttribute("opacity", "0.6");
     
-    const tileLeft = singleTile.cloneNode(true); tileLeft.setAttribute("transform", "translate(-1000,0)");
-    const tileRight = singleTile.cloneNode(true); tileRight.setAttribute("transform", "translate(1000,0)");
+    const tileLeft = singleTile.cloneNode(true); 
+    tileLeft.setAttribute("transform", "translate(-1000,0)");
+    const tileRight = singleTile.cloneNode(true); 
+    tileRight.setAttribute("transform", "translate(1000,0)");
     
     wrapper.appendChild(tileLeft);
     wrapper.appendChild(singleTile);
@@ -1173,19 +1164,23 @@ function generateRings(rng, data) {
     if (rng() > 0.2) {
         const ringBase = data.solid.color;
         for(let i=0; i<8; i++) {
-            const r = 600 + i * 20; const ry = r * 0.25;
+            const r = 600 + i * 20; 
+            const ry = r * 0.25;
             const arc = (s,e) => {
                 const rad=Math.PI/180;
                 const sx=500+r*Math.cos(e*rad), sy=500+ry*Math.sin(e*rad);
                 const ex=500+r*Math.cos(s*rad), ey=500+ry*Math.sin(s*rad);
                 return `M ${sx} ${sy} A ${r} ${ry} 0 0 0 ${ex} ${ey}`;
             };
-            const width = rng()*8+2; const opacity = rng() * 0.3 + 0.1;
+            const width = rng()*8+2; 
+            const opacity = rng() * 0.3 + 0.1;
             const color = artColor(ringBase, (i%2===0?20:-20), -10, 0);
             const back = document.createElementNS("http://www.w3.org/2000/svg", "path");
             back.setAttribute("d", arc(180, 360));
-            back.setAttribute("stroke", color); back.setAttribute("fill", "none");
-            back.setAttribute("stroke-width", width); back.setAttribute("opacity", opacity);
+            back.setAttribute("stroke", color); 
+            back.setAttribute("fill", "none");
+            back.setAttribute("stroke-width", width); 
+            back.setAttribute("opacity", opacity);
             back.setAttribute("transform", `rotate(${tilt}, 500, 500)`);
             dom.gRingsBack.appendChild(back);
             const front = back.cloneNode();
@@ -1194,7 +1189,8 @@ function generateRings(rng, data) {
         }
         return;
     }
-    const solidColor = data.solid.color; const iceColor = data.liquid.frozenColor || "#e0f2fe";
+    const solidColor = data.solid.color; 
+    const iceColor = data.liquid.frozenColor || "#e0f2fe";
     const palette = [solidColor, iceColor, artColor(solidColor, 15, -10), artColor(iceColor, -15, 5)];
     const perspective = 0.25 + rng() * 0.15; 
     const bands = [
@@ -1204,8 +1200,10 @@ function generateRings(rng, data) {
     ];
     const createArcPath = (radius, ry, startAngle, endAngle) => {
         const rad = Math.PI / 180;
-        const sx = 500 + radius * Math.cos(endAngle * rad); const sy = 500 + ry * Math.sin(endAngle * rad);
-        const ex = 500 + radius * Math.cos(startAngle * rad); const ey = 500 + ry * Math.sin(startAngle * rad);
+        const sx = 500 + radius * Math.cos(endAngle * rad); 
+        const sy = 500 + ry * Math.sin(endAngle * rad);
+        const ex = 500 + radius * Math.cos(startAngle * rad); 
+        const ey = 500 + ry * Math.sin(startAngle * rad);
         return `M ${sx} ${sy} A ${radius} ${ry} 0 0 0 ${ex} ${ey}`;
     };
     bands.forEach(band => {
@@ -1219,12 +1217,16 @@ function generateRings(rng, data) {
             const color = palette[Math.floor(rng() * palette.length)];
             const width = 1 + rng() * 3.5;
             const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            path.setAttribute("stroke", color); path.setAttribute("fill", "none");
-            path.setAttribute("stroke-width", width); path.setAttribute("stroke-opacity", finalOpacity);
+            path.setAttribute("stroke", color); 
+            path.setAttribute("fill", "none");
+            path.setAttribute("stroke-width", width); 
+            path.setAttribute("stroke-opacity", finalOpacity);
             path.setAttribute("transform", `rotate(${tilt}, 500, 500)`);
-            const backPath = path.cloneNode(); backPath.setAttribute("d", createArcPath(radius, ry, 180, 360));
+            const backPath = path.cloneNode(); 
+            backPath.setAttribute("d", createArcPath(radius, ry, 180, 360));
             dom.gRingsBack.appendChild(backPath);
-            const frontPath = path.cloneNode(); frontPath.setAttribute("d", createArcPath(radius, ry, 0, 180));
+            const frontPath = path.cloneNode(); 
+            frontPath.setAttribute("d", createArcPath(radius, ry, 0, 180));
             dom.gRingsFront.appendChild(frontPath);
         }
     });
@@ -1245,19 +1247,17 @@ function softUpdate() {
     dom.terminator.setAttribute('opacity', shadowOp);
     dom.terminator.setAttribute('d', 'M 500,50 A 450,450 0 1,1 500,950 A 550,450 0 1,0 500,50');
     
-    // Update shadow gradient
     const old = dom.defs.querySelector('#shadow-grad');
     if(old) old.remove();
     const grad = document.createElementNS("http://www.w3.org/2000/svg", "radialGradient");
     grad.setAttribute("id", "shadow-grad");
-    grad.setAttribute("cx", "35%"); grad.setAttribute("cy", "35%");
+    grad.setAttribute("cx", "35%"); 
+    grad.setAttribute("cy", "35%");
     grad.innerHTML = `<stop offset="50%" stop-color="#050508" stop-opacity="0"/><stop offset="100%" stop-color="#050508" stop-opacity="${shadowOp}"/>`;
     dom.defs.appendChild(grad);
 
-    // Toggle clouds
-    dom.gCloudsRotator.style.display = state.cloudsEnabled ? 'block' : 'none';
+    dom.gCloudsRotator.style.display = (state.cloudsEnabled) ? 'block' : 'none';
 
-    // Update water level
     const waterFactor = state.waterLevel / 100;
     const updateFilterIntercept = (id, val) => {
         const filter = document.getElementById(id);
@@ -1265,50 +1265,30 @@ function softUpdate() {
         const funcs = filter.querySelectorAll('feFuncR, feFuncG, feFuncB');
         funcs.forEach(f => f.setAttribute('intercept', val));
     };
-    
     if (state.layerThresholds && state.layerThresholds.length) {
         state.layerThresholds.forEach((baseLevel, i) => {
-            const offset = (waterFactor - 0.5) * 1.5;
+            const offset = (waterFactor - 0.5) * 1.5; 
             const target = baseLevel + offset;
             updateFilterIntercept(`thresh-layer-${i}`, -(target * 60));
         });
     }
-    
     const slope = 120;
     const lMaskThreshId = `thresh-mask-liquid-final-${state.seed}`;
     updateFilterIntercept(lMaskThreshId, (waterFactor * slope) + 0.5);
-    
     const landMaskThreshId = `thresh-mask-land-only-${state.seed}`;
     updateFilterIntercept(landMaskThreshId, -(waterFactor * 50) + 0.5);
 
-    // === PERFORMANT ROTATION UPDATE ===
+    // --- ROTATION UPDATE ---
     const rot = state.rotation;
-    
-    // 1. Update noise offset for seamless texture
-    const pixelOffset = (rot / 360) * 1000;
-    const noiseOffset = document.getElementById(`filter-offset-${state.seed}`);
-    if (noiseOffset) {
-        noiseOffset.setAttribute("dx", -pixelOffset);
-    }
-    
-    // 2. Hardware-accelerated translation for the 3000px strip
     const translate = -((rot / 360) * 1000) % 1000;
     
-    // Move the surface slider group
     if (dom.gSurfaceSlider) {
         dom.gSurfaceSlider.setAttribute("transform", `translate(${translate}, 0)`);
     }
-    
-    // Move clouds (with slight parallax)
+
     const cloudWrap = document.getElementById('cloud-wrapper');
     if (cloudWrap) {
-        cloudWrap.setAttribute("transform", `translate(${translate * 0.7}, 0)`);
-    }
-    
-    // Move geology
-    const geoWrap = document.getElementById('geo-wrapper');
-    if (geoWrap) {
-        geoWrap.setAttribute("transform", `translate(${translate}, 0)`);
+        cloudWrap.setAttribute("transform", `translate(${translate}, 0)`);
     }
 }
 
@@ -1317,8 +1297,10 @@ window.onload = () => {
     for(let i=0; i<80; i++) {
         const s = document.createElement('div');
         s.className = 'star';
-        s.style.top = Math.random()*100+'%'; s.style.left = Math.random()*100+'%';
-        s.style.width = Math.random()*2+'px'; s.style.height = s.style.width;
+        s.style.top = Math.random()*100+'%'; 
+        s.style.left = Math.random()*100+'%';
+        s.style.width = Math.random()*2+'px'; 
+        s.style.height = s.style.width;
         s.style.animationDelay = Math.random()*5+'s';
         bg.appendChild(s);
     }

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SB PLANETGEN V10.3 - FIXED</title>
+    <title>SB PLANETGEN V10.3 - IPHONE FIXED</title>
     <style>
         /* --- CORE VISUALS --- */
         :root {
@@ -229,30 +229,30 @@
                     <circle cx="500" cy="500" r="450" />
                 </clipPath>
 
-                <filter id="geo-blur" x="-20%" y="-20%" width="140%" height="140%">
+                <filter id="geo-blur" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
                     <feGaussianBlur stdDeviation="25" />
                 </filter>
 
-                <filter id="liquid-blur" x="-20%" y="-20%" width="140%" height="140%">
+                <filter id="liquid-blur" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
                     <feGaussianBlur stdDeviation="1" />
                 </filter>
                 
-                <filter id="zone-warp" x="-20%" y="-20%" width="140%" height="140%">
+                <filter id="zone-warp" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
                      <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="4" seed="123" result="turb"/>
                      <feDisplacementMap in="SourceGraphic" in2="turb" scale="60" xChannelSelector="R" yChannelSelector="G"/>
                      <feGaussianBlur stdDeviation="10" />
                 </filter>
 
-                <filter id="ice-noise" x="-20%" y="-20%" width="140%" height="140%">
+                <filter id="ice-noise" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
                      <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="4" seed="500" result="frost"/>
                      <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.4 0" />
                 </filter>
                 
-                <filter id="soft-atmos">
+                <filter id="soft-atmos" color-interpolation-filters="sRGB">
                     <feGaussianBlur stdDeviation="30" />
                 </filter>
 
-                <filter id="blur-shadow">
+                <filter id="blur-shadow" color-interpolation-filters="sRGB">
                     <feGaussianBlur stdDeviation="20" />
                 </filter>
             </defs>
@@ -374,6 +374,7 @@
  * - Replaced canvas lens with multi-stop radial gradient for proper spherical distortion
  * - Maintains sliding texture performance
  * - Full terrain quality restored
+ * - Added color-interpolation-filters="sRGB" to all dynamic filters to fix iOS gamma issues
  */
 
 const LIQUIDS = [
@@ -685,6 +686,7 @@ function fullRebuild() {
     lensFilter.setAttribute("width", "1000"); 
     lensFilter.setAttribute("height", "1000");
     lensFilter.setAttribute("filterUnits", "userSpaceOnUse");
+    lensFilter.setAttribute("color-interpolation-filters", "sRGB"); // IPHONE FIX
     lensFilter.classList.add('dynamic-def');
     
     lensFilter.innerHTML = `
@@ -701,6 +703,7 @@ function fullRebuild() {
     masterFilter.setAttribute("y", "0%");
     masterFilter.setAttribute("width", "100%"); 
     masterFilter.setAttribute("height", "100%");
+    masterFilter.setAttribute("color-interpolation-filters", "sRGB"); // IPHONE FIX
     masterFilter.classList.add('dynamic-def');
     
     masterFilter.innerHTML = `
@@ -725,6 +728,7 @@ function fullRebuild() {
     cloudFilter.setAttribute("width", "1000"); 
     cloudFilter.setAttribute("height", "1000");
     cloudFilter.setAttribute("filterUnits", "userSpaceOnUse");
+    cloudFilter.setAttribute("color-interpolation-filters", "sRGB"); // IPHONE FIX
     cloudFilter.classList.add('dynamic-def');
     
 	cloudFilter.innerHTML = `
@@ -909,6 +913,7 @@ function createCompositeMask(id, thermalMaskId, noiseId, threshold, invert, slop
     const threshId = `thresh-${id}`;
     const filter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     filter.setAttribute("id", threshId);
+    filter.setAttribute("color-interpolation-filters", "sRGB"); // IPHONE FIX
     filter.classList.add('dynamic-def');
     let slope = slopeVal, intercept = -(threshold * slope) + 0.5;
     if (invert) { slope = -slopeVal; intercept = (threshold * slopeVal) + 0.5; }
@@ -954,6 +959,7 @@ function generateSolidLayers(rng, data, palette, noiseID) {
         const threshID = `thresh-layer-${i}`;
         const threshFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
         threshFilter.setAttribute("id", threshID);
+        threshFilter.setAttribute("color-interpolation-filters", "sRGB"); // IPHONE FIX
         threshFilter.classList.add('dynamic-def');
         const jitter = (rng() * 0.04) - 0.02;
         const level = Math.max(0, Math.min(1, normalizedStops[i] + jitter));

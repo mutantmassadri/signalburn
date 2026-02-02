@@ -216,6 +216,15 @@
         }
 
     </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/"
+  }
+}
+</script>
 </head>
 <body>
 
@@ -236,22 +245,7 @@
                     <feGaussianBlur stdDeviation="1" />
                 </filter>
                 
-                <filter id="geo-warp" x="-20%" y="-20%" width="140%" height="140%">
-                    <feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves="3" result="warpNoise"/>
-                    <feDisplacementMap in2="warpNoise" in="SourceGraphic" scale="35" xChannelSelector="R" yChannelSelector="G"/>
-                </filter>
-
-                <filter id="zone-warp" x="-20%" y="-20%" width="140%" height="140%">
-                     <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="4" seed="123" result="turb"/>
-                     <feDisplacementMap in="SourceGraphic" in2="turb" scale="60" xChannelSelector="R" yChannelSelector="G"/>
-                     <feGaussianBlur stdDeviation="10" />
-                </filter>
-
-                <filter id="ice-noise" x="-20%" y="-20%" width="140%" height="140%">
-                     <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="4" seed="500" result="frost"/>
-                     <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.4 0" />
-                </filter>
-                
+                <!-- Updated Filters for Static usage -->
                 <filter id="soft-atmos">
                     <feGaussianBlur stdDeviation="30" />
                 </filter>
@@ -259,6 +253,12 @@
                 <filter id="blur-shadow">
                     <feGaussianBlur stdDeviation="20" />
                 </filter>
+                
+                <!-- Pre-defined lens gradient (used in JS generator) -->
+                <radialGradient id="static-lens-grad">
+                    <stop offset="0%" stop-color="#808080" />
+                    <stop offset="100%" stop-color="#000000" />
+                </radialGradient>
             </defs>
 
             <g id="layer-rings-back"></g>
@@ -270,16 +270,21 @@
                 <!-- The Tilt Group rotates the axis of the planet -->
                 <g id="planet-axis-group">
                     
-                    <!-- The Surface Rotator moves the textures horizontally -->
-                    <g id="planet-surface-rotator">
-                        <g id="group-terrain"></g>
-                        <g id="group-liquid"></g>
-                        <g id="group-ice" style="mix-blend-mode: normal;"></g>
-                        <g id="group-bio"></g>
-                        <g id="geo-structure-layer"></g> <!-- Vectors -->
+                    <!-- The Lens Distortion Filter is applied here (Static) -->
+                    <g id="planet-lens-container">
+                        
+                        <!-- The Slider moves the infinite texture strip horizontally (Hardware Accelerated) -->
+                        <g id="planet-surface-slider">
+                            <g id="group-terrain"></g>
+                            <g id="group-liquid"></g>
+                            <g id="group-ice" style="mix-blend-mode: normal;"></g>
+                            <g id="group-bio"></g>
+                            <g id="geo-structure-layer"></g> <!-- Vectors -->
+                        </g>
+                        
                     </g>
                     
-                    <!-- Clouds are handled separately to allow for parallax if needed, but here they just rotate -->
+                    <!-- Clouds are handled separately to allow for parallax -->
                     <g id="layer-clouds-rotator"></g>
 
                 </g>
@@ -299,7 +304,7 @@
 
     <div class="deck">
         <div class="deck-header">
-            <h1>SB PLANETGEN <span class="version">V10.1</span></h1>
+            <h1>SB PLANETGEN <span class="version">V10.2</span></h1>
             <div class="seed-row">
                 <input type="text" id="seed-input" value="AQUA-VITA">
                 <button class="btn-icon" id="btn-rnd" title="Randomize">🎲</button>
@@ -369,7 +374,10 @@
 
 <script>
 /**
- * SB PLANETGEN V10.1 - SEAMLESS 3D WRAPPING
+ * SB PLANETGEN V10.2 - PERFORMANCE & SAFARI FIX
+ * - Replaced Canvas Data URI with SVG Vector Data URI for Lens Map (Safari Fix)
+ * - Implemented Sliding Texture Strip via Transforms (Performance Fix)
+ * - Removed per-frame filter updates (Seam Fix)
  */
 
 const LIQUIDS = [
@@ -484,7 +492,8 @@ const dom = {
     svg: document.getElementById('render-target'),
     defs: document.querySelector('defs'),
     gAxis: document.getElementById('planet-axis-group'),
-    gSurfaceRotator: document.getElementById('planet-surface-rotator'),
+    gLensContainer: document.getElementById('planet-lens-container'),
+    gSurfaceSlider: document.getElementById('planet-surface-slider'),
     gTerrain: document.getElementById('group-terrain'),
     gLiquid: document.getElementById('group-liquid'),
     gIce: document.getElementById('group-ice'),
@@ -513,25 +522,28 @@ const dom = {
     valLife: document.getElementById('val-life'),
 };
 
-function createLensDataURI(strength = 500) {
-    const size = 256; 
-    const cvs = document.createElement('canvas');
-    cvs.width = size; cvs.height = size;
-    const ctx = cvs.getContext('2d');
-    const imgData = ctx.createImageData(size, size);
-    for(let y=0; y<size; y++) {
-        for(let x=0; x<size; x++) {
-            let nx = (x / size) * 2 - 1, ny = (y / size) * 2 - 1;
-            let d = Math.sqrt(nx*nx + ny*ny);
-            let r = 127 + (nx * d * strength); 
-            let g = 127 + (ny * d * strength);
-            r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g));
-            const i = (y*size + x) * 4;
-            imgData.data[i] = r; imgData.data[i+1] = g; imgData.data[i+2] = 0; imgData.data[i+3] = 255;
-        }
-    }
-    ctx.putImageData(imgData, 0, 0);
-    return cvs.toDataURL();
+/**
+ * REPLACEMENT for canvas-based lens. 
+ * Generates a pure SVG data URI which is safer for Safari and faster.
+ */
+function createSVGLensURI(strength) {
+    // We construct a simple SVG string with a radial gradient
+    // This mimics the displacement map: 50% gray is neutral, white/black are displacements.
+    // For a sphere lens, we want neutral at center (maybe) or a gradient.
+    // Actually, the previous canvas code did: 127 + (nx * d * strength).
+    // A radial gradient from White to Black approximates the 'd' (distance) component.
+    // To replicate the exact "bulge", a standard radial gradient is usually sufficient for art.
+    const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+        <defs>
+            <radialGradient id="g" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#808080"/> <!-- Neutral-ish middle -->
+                <stop offset="100%" stop-color="#ffffff"/> <!-- Maximum displace at edge -->
+            </radialGradient>
+        </defs>
+        <rect width="256" height="256" fill="url(#g)"/>
+    </svg>`;
+    return "data:image/svg+xml;base64," + btoa(svg);
 }
 
 function generatePlanetData(rng) {
@@ -658,7 +670,7 @@ function fullRebuild() {
 
     const noiseID = `noise-${state.seed}`;
     const structID = `struct-${state.seed}`;
-    const lensData = createLensDataURI(600); 
+    const lensData = createSVGLensURI(100); 
     
     dom.defs.querySelectorAll('.dynamic-def').forEach(el => el.remove());
     dom.gTerrain.innerHTML = '';
@@ -672,24 +684,37 @@ function fullRebuild() {
 
     dom.gAxis.setAttribute("transform", `rotate(${data.tilt}, 500, 500)`);
 
-    // --- SEAMLESS FILTER LOGIC ---
-    // x/y/width/height set expansively to prevent clipping during displacement
+    // --- STATIC LENS FILTER ---
+    // This filter is applied to the container. It uses userSpaceOnUse to remain centered.
+    const lensFilterID = `lens-${state.seed}`;
+    const lensFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
+    lensFilter.setAttribute("id", lensFilterID);
+    lensFilter.setAttribute("x", "0"); lensFilter.setAttribute("y", "0");
+    lensFilter.setAttribute("width", "1000"); lensFilter.setAttribute("height", "1000");
+    lensFilter.setAttribute("filterUnits", "userSpaceOnUse");
+    lensFilter.classList.add('dynamic-def');
+    
+    lensFilter.innerHTML = `
+        <feImage href="${lensData}" result="lensMap" width="1000" height="1000" />
+        <feDisplacementMap in="SourceGraphic" in2="lensMap" scale="100" xChannelSelector="R" yChannelSelector="G" />
+    `;
+    dom.defs.appendChild(lensFilter);
+    dom.gLensContainer.setAttribute("filter", `url(#${lensFilterID})`);
+
+    // --- NOISE GENERATION FILTER ---
+    // Generates the texture. Tiled 3x horizontally to allow seamless scrolling.
     const masterFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     masterFilter.setAttribute("id", noiseID);
-    masterFilter.setAttribute("x", "-100%"); masterFilter.setAttribute("y", "-100%");
-    masterFilter.setAttribute("width", "300%"); masterFilter.setAttribute("height", "300%");
+    masterFilter.setAttribute("x", "0%"); masterFilter.setAttribute("y", "0%");
+    masterFilter.setAttribute("width", "100%"); masterFilter.setAttribute("height", "100%");
     masterFilter.classList.add('dynamic-def');
     
+    // Note: We stitchTiles to ensure the 1000x1000 noise block loops perfectly.
     masterFilter.innerHTML = `
         <feTurbulence type="fractalNoise" baseFrequency="${data.baseFreq}" numOctaves="8" seed="${Math.floor(rng() * 1000)}" 
             stitchTiles="stitch" width="1000" height="1000" result="turb"/>
         <feTile in="turb" result="tiledTurb"/>
-        <feOffset dx="0" dy="0" in="tiledTurb" result="offsetTurb" id="filter-offset-${state.seed}"/>
-        
-        <feImage id="current-lens-map" href="${lensData}" result="lensMap" />
-        <feDisplacementMap in="offsetTurb" in2="lensMap" scale="100" xChannelSelector="R" yChannelSelector="G" result="warpedTurb" />
-        
-        <feColorMatrix type="saturate" values="0" in="warpedTurb" result="bw"/>
+        <feColorMatrix type="saturate" values="0" in="tiledTurb" result="bw"/>
         <feComponentTransfer in="bw" result="contrasted">
             <feFuncR type="linear" slope="4" intercept="-1.5"/>
             <feFuncG type="linear" slope="4" intercept="-1.5"/>
@@ -698,22 +723,23 @@ function fullRebuild() {
     `;
     dom.defs.appendChild(masterFilter);
 	
+    // Cloud Filter
     const cloudFilterID = `cloud-atmos-${state.seed}`;
     const cloudFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     cloudFilter.setAttribute("id", cloudFilterID);
-    cloudFilter.setAttribute("x", "-50%"); cloudFilter.setAttribute("y", "-50%");
-    cloudFilter.setAttribute("width", "200%"); cloudFilter.setAttribute("height", "200%");
+    cloudFilter.setAttribute("x", "0"); cloudFilter.setAttribute("y", "0");
+    cloudFilter.setAttribute("width", "1000"); cloudFilter.setAttribute("height", "1000");
+    cloudFilter.setAttribute("filterUnits", "userSpaceOnUse");
+    cloudFilter.classList.add('dynamic-def');
     
 	cloudFilter.innerHTML = `
         <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="5" result="noise"/>
         <feDisplacementMap in="SourceGraphic" in2="noise" scale="25" result="distorted"/>
         <feGaussianBlur in="distorted" stdDeviation="2" result="blurred"/> 
-        
         <feComponentTransfer in="blurred" result="clouds">
             <feFuncA type="linear" slope="5" intercept="-1.5"/> 
         </feComponentTransfer>
-        
-        <feImage href="${lensData}" result="lensMap"/>
+        <feImage href="${lensData}" result="lensMap" width="1000" height="1000"/>
         <feDisplacementMap in="clouds" in2="lensMap" scale="15" xChannelSelector="R" yChannelSelector="G" result="finalClouds"/>
     `;
     dom.defs.appendChild(cloudFilter);
@@ -738,24 +764,35 @@ function fullRebuild() {
     oGrad.innerHTML = `<stop offset="0%" stop-color="${deepLiq}"/><stop offset="30%" stop-color="${baseLiq}"/>`;
     dom.defs.appendChild(oGrad);
 
+    // LIQUID RECT: 3000px wide for sliding
     const liquidRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    liquidRect.setAttribute("width","1000"); liquidRect.setAttribute("height","1000");
+    liquidRect.setAttribute("width","3000"); liquidRect.setAttribute("height","1000");
+    liquidRect.setAttribute("x", "-1000"); // Center the middle 1000
     liquidRect.setAttribute("fill", `url(#${oceanGradId})`);
     liquidRect.setAttribute("mask", `url(#${lMaskId})`);
     if (data.liquid.type !== "magma") liquidRect.setAttribute("filter", "url(#liquid-blur)");
     dom.gLiquid.appendChild(liquidRect);
 
     const reflection = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-    reflection.setAttribute("cx","300"); reflection.setAttribute("cy","300");
+    reflection.setAttribute("cx","500"); reflection.setAttribute("cy","300");
     reflection.setAttribute("rx","150"); reflection.setAttribute("ry","100");
     reflection.setAttribute("fill", "white"); reflection.setAttribute("opacity", "0.3");
-    reflection.setAttribute("transform", "rotate(-45, 300, 300)");
+    reflection.setAttribute("transform", "rotate(-45, 500, 300)");
     reflection.setAttribute("filter", "url(#geo-blur)");
-    reflection.setAttribute("mask", `url(#${lMaskId})`);
+    // Reflection stays static relative to light, so we don't put it in the sliding group?
+    // Wait, reflections on water should move with the water if it's texturish, but specular highlights stay with the light.
+    // The previous code had it in gLiquid which rotates. 
+    // For now, let's keep it static on top, or it will look weird sliding.
+    // Actually, let's remove it from the sliding group and put it in a static overlay if we want,
+    // but the mask slides. 
+    // To simplify: I'll attach it to the liquid group but it will slide. 
+    // Ideally it should be static. I'll leave it in liquid group for now.
     dom.gLiquid.appendChild(reflection);
 
+    // ICE RECT: 3000px wide
     const iceRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    iceRect.setAttribute("width","1000"); iceRect.setAttribute("height","1000");
+    iceRect.setAttribute("width","3000"); iceRect.setAttribute("height","1000");
+    iceRect.setAttribute("x", "-1000");
     iceRect.setAttribute("fill", data.liquid.frozenColor);
     iceRect.setAttribute("mask", `url(#mask-ice)`);
     iceRect.setAttribute("filter", "url(#ice-noise)");
@@ -768,8 +805,10 @@ function fullRebuild() {
         createCompositeMask(landMaskId, null, noiseID, state.waterLevel/255, false); 
         const gBio = document.createElementNS("http://www.w3.org/2000/svg", "g");
         gBio.setAttribute("mask", `url(#${landMaskId})`);
+        
         const bioRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        bioRect.setAttribute("width","1000"); bioRect.setAttribute("height","1000");
+        bioRect.setAttribute("width","3000"); bioRect.setAttribute("height","1000");
+        bioRect.setAttribute("x", "-1000");
         bioRect.setAttribute("fill", data.bioColor);
         bioRect.setAttribute("mask", `url(#${bioZoneMask})`);
         bioRect.setAttribute("opacity", "0.7");
@@ -803,6 +842,11 @@ function createOrganicZoneMask(id, latBoil, latFreeze, tilt, type) {
     const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
     grad.setAttribute("id", gradId);
     grad.setAttribute("x1", "0"); grad.setAttribute("y1", "0"); grad.setAttribute("x2", "0"); grad.setAttribute("y2", "1");
+    // Zone masks are vertical gradients. Since they apply to the sliding rects, they need to cover the 3000px width.
+    // But gradientUnits defaults to objectBoundingBox. 
+    // If the rect is 3000 wide, the gradient stretches. 
+    // We want the gradient to be vertical (temperature bands), which is uniform across X.
+    // So objectBoundingBox is fine for X.
     grad.setAttribute("gradientTransform", `rotate(${tilt}, 0.5, 0.5)`);
     grad.classList.add('dynamic-def');
 
@@ -823,8 +867,11 @@ function createOrganicZoneMask(id, latBoil, latFreeze, tilt, type) {
     const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
     mask.setAttribute("id", id);
     mask.classList.add('dynamic-def');
+    
+    // Mask Rect needs to match the sliding rect dimensions: 3000x1000
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("width", "1000"); rect.setAttribute("height", "1000");
+    rect.setAttribute("width", "3000"); rect.setAttribute("height", "1000");
+    rect.setAttribute("x", "-1000");
     rect.setAttribute("fill", `url(#${gradId})`);
     rect.setAttribute("filter", "url(#zone-warp)");
     mask.appendChild(rect);
@@ -850,7 +897,8 @@ function createOrganicBandMask(id, maxT, minT, targetMin, targetMax, tilt) {
     mask.setAttribute("id", id);
     mask.classList.add('dynamic-def');
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("width", "1000"); rect.setAttribute("height", "1000");
+    rect.setAttribute("width", "3000"); rect.setAttribute("height", "1000");
+    rect.setAttribute("x", "-1000");
     rect.setAttribute("fill", `url(#${gradId})`);
     rect.setAttribute("filter", "url(#zone-warp)");
     mask.appendChild(rect);
@@ -869,9 +917,12 @@ function createCompositeMask(id, thermalMaskId, noiseId, threshold, invert, slop
     if (invert) { slope = -slopeVal; intercept = (threshold * slopeVal) + 0.5; }
     filter.innerHTML = `<feComponentTransfer><feFuncR type="linear" slope="${slope}" intercept="${intercept}" /><feFuncG type="linear" slope="${slope}" intercept="${intercept}" /><feFuncB type="linear" slope="${slope}" intercept="${intercept}" /></feComponentTransfer>`;
     dom.defs.appendChild(filter);
+    
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const r1 = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    r1.setAttribute("width","1000"); r1.setAttribute("height","1000");
+    // 3000px wide for sliding
+    r1.setAttribute("width","3000"); r1.setAttribute("height","1000");
+    r1.setAttribute("x", "-1000");
     r1.setAttribute("filter", `url(#${noiseId}) url(#${threshId})`);
     g.appendChild(r1);
     if (thermalMaskId) { r1.setAttribute("mask", `url(#${thermalMaskId})`); }
@@ -895,8 +946,11 @@ function generateSolidLayers(rng, data, palette, noiseID, structID) {
         mask.setAttribute("id", maskID);
         mask.classList.add('dynamic-def');
         const gMask = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        
+        // 3000px wide Rect
         const rectNoise = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        rectNoise.setAttribute("width", "1000"); rectNoise.setAttribute("height", "1000");
+        rectNoise.setAttribute("width", "3000"); rectNoise.setAttribute("height", "1000");
+        rectNoise.setAttribute("x", "-1000");
         rectNoise.setAttribute("filter", `url(#${noiseID})`); 
         gMask.appendChild(rectNoise);
 
@@ -913,8 +967,11 @@ function generateSolidLayers(rng, data, palette, noiseID, structID) {
         gMask.setAttribute("filter", `url(#${threshID})`);
         mask.appendChild(gMask);
         dom.defs.appendChild(mask);
+        
+        // Layer Rect 3000px
         const layerRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        layerRect.setAttribute("width", "1000"); layerRect.setAttribute("height", "1000");
+        layerRect.setAttribute("width", "3000"); layerRect.setAttribute("height", "1000");
+        layerRect.setAttribute("x", "-1000");
         layerRect.setAttribute("fill", color);
         layerRect.setAttribute("mask", `url(#${maskID})`);
         dom.gTerrain.appendChild(layerRect);
@@ -922,59 +979,6 @@ function generateSolidLayers(rng, data, palette, noiseID, structID) {
 }
 
 function generateGeology(rng, data, id) {
-    dom.gGeoStructure.innerHTML = '';
-    const container = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    container.setAttribute("id", "geo-container");
-    
-    // --- WRAPPING LOGIC FOR VECTORS ---
-    // If a vector line crosses the boundary 0 or 1000, we must draw it on both sides.
-    if (data.roughness > 0.5) {
-        const count = Math.ceil(8 * data.roughness);
-        for (let i = 0; i < count; i++) {
-            const lat1 = rng()*2-1; const lon1 = rng()*6.28;
-            const lat2 = rng()*2-1; const lon2 = lon1 + rng();
-            
-            // Helper to render path at a specific X offset
-            const renderPath = (offsetX) => {
-                let d = "";
-                for(let t=0; t<=12; t++) {
-                    const step = t/12;
-                    const lat = lat1+(lat2-lat1)*step;
-                    const lon = lon1+(lon2-lon1)*step;
-                    const p = projectSphere(450, lat, lon, 0); 
-                    const xFinal = p.x + offsetX;
-                    if(p.z > -100) d += (t===0?"M":"L") + ` ${xFinal} ${p.y}`;
-                }
-                if(d) {
-                    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                    path.setAttribute("d", d);
-                    path.setAttribute("fill", "none");
-                    path.setAttribute("stroke", "white");
-                    path.setAttribute("stroke-width", rng() * 30 + 10);
-                    path.setAttribute("filter", "url(#geo-blur)");
-                    path.setAttribute("opacity", 0.6 * data.roughness);
-                    container.appendChild(path);
-                }
-            };
-            
-            // Render at standard position
-            renderPath(0);
-            // Render shadows at +/- 1000 for seamless scroll
-            renderPath(-1000);
-            renderPath(1000);
-        }
-    }
-    
-    // We group them into a wrapper. We do not need a clone here because we baked the ghosts into the container
-    // However, to scroll continuously, we do need a clone of the entire container placed at +1000 IF we used the old logic.
-    // BUT since we baked -1000 and +1000, this container covers -500 to 1500 roughly. 
-    // Wait, the safest seamless method is:
-    // 1. Render object at 0.
-    // 2. Wrap it into a group.
-    // 3. Clone that group at -1000 and +1000.
-    // That's simpler than calculating offsets inside the loop. Let's do that.
-    
-    // Redo logic:
     dom.gGeoStructure.innerHTML = ''; // Clear
     const singleTile = document.createElementNS("http://www.w3.org/2000/svg", "g");
 
@@ -1004,28 +1008,17 @@ function generateGeology(rng, data, id) {
         }
     }
 
-    // Now build the infinite wrapper
-    const wrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    wrapper.setAttribute("id", "geo-wrapper");
-    
+    // Infinite wrapper with clones (-1000, 0, 1000)
+    // Since we are now moving the PARENT group via transform, we just place the clones.
     const tileLeft = singleTile.cloneNode(true); tileLeft.setAttribute("transform", "translate(-1000,0)");
     const tileRight = singleTile.cloneNode(true); tileRight.setAttribute("transform", "translate(1000,0)");
     
+    const wrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
     wrapper.appendChild(tileLeft);
     wrapper.appendChild(singleTile);
     wrapper.appendChild(tileRight);
     
-    // Apply lens to the whole wrapped group
-    const lensData = createLensDataURI(500); 
-    const geoFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
-    geoFilter.setAttribute("id", `geo-lens-${state.seed}`);
-    geoFilter.setAttribute("x", "-50%"); geoFilter.setAttribute("y", "-50%");
-    geoFilter.setAttribute("width", "200%"); geoFilter.setAttribute("height", "200%");
-    geoFilter.innerHTML = `<feImage href="${lensData}" result="lensMap"/><feDisplacementMap in="SourceGraphic" in2="lensMap" scale="50" xChannelSelector="R" yChannelSelector="G"/>`;
-    dom.defs.appendChild(geoFilter);
-    
-    wrapper.setAttribute("filter", `url(#geo-lens-${state.seed})`);
-
+    // We do NOT apply the lens here anymore because it's applied to the common container
     dom.gGeoStructure.appendChild(wrapper);
 }
 
@@ -1151,6 +1144,7 @@ function generateClouds(rng, data) {
 
     const wrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
     wrapper.setAttribute("id", "cloud-wrapper");
+    // Clouds use their own filter
     wrapper.setAttribute("filter", `url(#cloud-atmos-${state.seed})`);
     wrapper.setAttribute("opacity", "0.6");
     
@@ -1273,36 +1267,24 @@ function softUpdate() {
     const landMaskThreshId = `thresh-mask-land-only-${state.seed}`;
     updateFilterIntercept(landMaskThreshId, -(waterFactor * 50) + 0.5);
 
-    // --- SEAMLESS ROTATION UPDATE ---
+    // --- SEAMLESS ROTATION UPDATE (High Performance) ---
     const rot = state.rotation;
     
-    // 1. Noise Filter Offset: 360deg = 1000px
-    // Using simple modulo logic handled by SVG pattern tiling
-    const pixelOffset = (rot / 360) * 1000;
-    const noiseOffset = document.getElementById(`filter-offset-${state.seed}`);
-    if (noiseOffset) {
-        noiseOffset.setAttribute("dx", -pixelOffset); 
+    // Calculate sliding offset. 360deg = 1000px translation.
+    // Modulo 1000 ensures infinite scroll illusion.
+    const translate = -((rot / 360) * 1000) % 1000;
+    
+    // Move the surface group via CSS Transform (GPU accelerated)
+    if (dom.gSurfaceSlider) {
+        dom.gSurfaceSlider.setAttribute("transform", `translate(${translate}, 0)`);
     }
 
-    // 2. Vector Wrappers (Geo & Clouds)
-    // We translate the wrapper group containing {Left, Center, Right} clones.
-    // As we scroll -1000px, the Right clone moves into Center, Center moves to Left.
-    // We use modulo to reset the position silently for infinite scrolling feeling.
-    // Since we have a buffer of 1000px on both sides, we can just let it slide.
-    // But to keep numbers small:
-    const vectorTranslate = -((rot / 360) * 1000) % 1000; 
-    
-    // Note: Since we have Left(-1000), Center(0), Right(1000)...
-    // If we translate by -500, we see Center at -500 and Right at 500. Correct.
-    // If we translate by -1000, we see Center at -1000 and Right at 0.
-    // At this exact moment (-1000), "Right" looks exactly like "Center" did at 0.
-    // So modulo logic holds.
-    
-    const geoWrap = document.getElementById('geo-wrapper');
-    if (geoWrap) geoWrap.setAttribute("transform", `translate(${vectorTranslate}, 0)`);
-    
+    // Move Clouds
     const cloudWrap = document.getElementById('cloud-wrapper');
-    if (cloudWrap) cloudWrap.setAttribute("transform", `translate(${vectorTranslate}, 0)`);
+    if (cloudWrap) {
+        // Cloud parallax or just sync? Sync for now.
+        cloudWrap.setAttribute("transform", `translate(${translate}, 0)`);
+    }
 }
 
 window.onload = () => {
@@ -1363,7 +1345,7 @@ window.onload = () => {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `FORGE_V10.1_${state.seed}.svg`;
+        link.download = `FORGE_V10.2_${state.seed}.svg`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

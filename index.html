@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SB PLANETGEN V10.3 - IPHONE FIXED</title>
+    <title>SB PLANETGEN V12 - HIGH FIDELITY</title>
     <style>
         /* --- CORE VISUALS --- */
         :root {
@@ -40,7 +40,9 @@
             align-items: center;
             justify-content: center;
             overflow: hidden;
+            cursor: grab;
         }
+        .stage:active { cursor: grabbing; }
 
         .stars { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; pointer-events: none; }
         .star {
@@ -53,11 +55,15 @@
             100% { opacity: 0.1; transform: scale(0.5); }
         }
 
-        #render-target {
-            width: 95vmin; height: 95vmin;
+        /* THE 3D CANVAS */
+        #webgl-canvas {
+            width: 100%; height: 100%;
             z-index: 10;
-            filter: drop-shadow(0 0 50px rgba(0,0,0,0.8));
-            will-change: transform; 
+        }
+
+        /* HIDDEN TEXTURE BAKER */
+        #texture-baker-container {
+            position: absolute; top: -9999px; left: -9999px; visibility: hidden;
         }
 
         /* --- RIGHT: CONTROL DECK --- */
@@ -137,11 +143,11 @@
         .data-val { color: var(--c-text); font-weight: bold; text-align: right;}
         
         .tag { font-size: 0.7em; padding: 2px 4px; border-radius: 3px; margin-left: 5px; opacity: 0.9; }
-        .tag-c { background: #064e3b; color: #6ee7b7; border: 1px solid #059669; } /* Carbon/Life */
-        .tag-si { background: #312e81; color: #a5b4fc; border: 1px solid #4f46e5; } /* Gases/Water */
-        .tag-fe { background: #451a03; color: #fdba74; border: 1px solid #c2410c; } /* Metals/Rock */
-        .tag-x { background: #4c1d95; color: #e9d5ff; border: 1px solid #8b5cf6; } /* Exotic */
-        .tag-bio { background: #831843; color: #f9a8d4; border: 1px solid #db2777; } /* Biological */
+        .tag-c { background: #064e3b; color: #6ee7b7; border: 1px solid #059669; }
+        .tag-si { background: #312e81; color: #a5b4fc; border: 1px solid #4f46e5; }
+        .tag-fe { background: #451a03; color: #fdba74; border: 1px solid #c2410c; }
+        .tag-x { background: #4c1d95; color: #e9d5ff; border: 1px solid #8b5cf6; }
+        .tag-bio { background: #831843; color: #f9a8d4; border: 1px solid #db2777; }
         .tag-none { background: #27272a; color: #a1a1aa; border: 1px solid #3f3f46; }
 
         .tag-life { color: #10b981; text-shadow: 0 0 10px rgba(16,185,129,0.3); font-weight: bold; }
@@ -205,109 +211,54 @@
                 overflow-y: auto;
             }
 
-            #render-target {
-                width: 90vmin;
-                height: 90vmin;
-            }
-
-            .dl-group {
-                margin-top: 12px;
-                padding-top: 12px;
-                padding-bottom: 12px;
-            }
+            .dl-group { margin-top: 12px; padding: 12px; }
         }
 
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.4",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/"
-  }
-}
-</script>
 </head>
 <body>
 
     <div class="stage" id="stage">
         <div class="stars" id="starfield"></div>
-        
-        <svg id="render-target" viewBox="-200 -200 1400 1400" xmlns="http://www.w3.org/2000/svg">
+        <canvas id="webgl-canvas"></canvas>
+    </div>
+
+    <div id="texture-baker-container">
+        <svg id="surface-baker" width="2048" height="1024" viewBox="0 0 2048 1024" xmlns="http://www.w3.org/2000/svg">
             <defs>
-                <clipPath id="planet-clip">
-                    <circle cx="500" cy="500" r="450" />
-                </clipPath>
-
-                <filter id="geo-blur" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
-                    <feGaussianBlur stdDeviation="25" />
-                </filter>
-
-                <filter id="liquid-blur" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
-                    <feGaussianBlur stdDeviation="1" />
-                </filter>
-                
-                <filter id="zone-warp" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+                <filter id="geo-blur"><feGaussianBlur stdDeviation="25" /></filter>
+                <filter id="liquid-blur"><feGaussianBlur stdDeviation="1" /></filter>
+                <filter id="zone-warp">
                      <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="4" seed="123" result="turb"/>
                      <feDisplacementMap in="SourceGraphic" in2="turb" scale="60" xChannelSelector="R" yChannelSelector="G"/>
                      <feGaussianBlur stdDeviation="10" />
                 </filter>
-                
-                <filter id="soft-atmos" color-interpolation-filters="sRGB">
-                    <feGaussianBlur stdDeviation="30" />
-                </filter>
+            </defs>
+            <rect id="bake-bg" width="2048" height="1024" fill="#000" />
+            <g id="bake-group-terrain"></g>
+            <g id="bake-group-liquid"></g>
+            <g id="bake-group-ice"></g>
+            <g id="bake-group-bio"></g>
+        </svg>
 
-                <filter id="blur-shadow" color-interpolation-filters="sRGB">
-                    <feGaussianBlur stdDeviation="20" />
+        <svg id="cloud-baker" width="2048" height="1024" viewBox="0 0 2048 1024" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                 <filter id="cloud-fluff">
+                    <feGaussianBlur stdDeviation="3" />
+                    <feComponentTransfer>
+                         <feFuncA type="linear" slope="2" intercept="0"/> 
+                    </feComponentTransfer>
                 </filter>
             </defs>
-
-            <g id="layer-rings-back"></g>
-
-            <circle id="planet-halo" cx="500" cy="500" r="453" fill="#111115" />
-
-            <g id="planet-sphere" clip-path="url(#planet-clip)">
-                
-                <!-- The Tilt Group rotates the axis of the planet -->
-                <g id="planet-axis-group">
-                    
-                    <!-- The Lens Container applies 3D spherical distortion -->
-                    <g id="planet-lens-container">
-                        
-                        <!-- The Surface Slider moves horizontally for rotation -->
-                        <g id="planet-surface-slider">
-                            <g id="group-terrain"></g>
-                            <g id="group-liquid"></g>
-                            <g id="group-ice" style="mix-blend-mode: normal;"></g>
-                            <g id="group-bio"></g>
-                            <g id="geo-structure-layer"></g>
-                        </g>
-                        
-                    </g>
-                    
-                    <!-- Clouds rotate separately -->
-                    <g id="layer-clouds-rotator"></g>
-
-                </g>
-
-            </g>
-
-            <circle id="atmos-glow" cx="500" cy="500" r="450" fill="url(#grad-atmos)" pointer-events="none" style="mix-blend-mode: screen;"/>
-            <circle id="rim-light" cx="500" cy="500" r="448" fill="none" stroke="#fff" stroke-width="3" opacity="0.4" pointer-events="none"/>
-
-            <circle id="shadow-overlay" cx="500" cy="500" r="450" fill="url(#shadow-grad)" pointer-events="none"/>
-            <path id="terminator" d="" fill="#08080a" opacity="0.6" filter="url(#blur-shadow)" style="mix-blend-mode: multiply;" pointer-events="none"/>
-            
-            <g id="layer-rings-front"></g>
-
+            <g id="bake-group-clouds" filter="url(#cloud-fluff)"></g>
         </svg>
     </div>
 
     <div class="deck">
         <div class="deck-header">
-            <h1>SB PLANETGEN <span class="version">V10.3</span></h1>
+            <h1>SB PLANETGEN <span class="version">V12</span></h1>
             <div class="seed-row">
-                <input type="text" id="seed-input" value="AQUA-VITA">
+                <input type="text" id="seed-input" value="TERRA-PRIME">
                 <button class="btn-icon" id="btn-rnd" title="Randomize">🎲</button>
             </div>
         </div>
@@ -333,12 +284,12 @@
                     <input type="range" id="rng-water" min="0" max="100" value="50">
                 </div>
 
-                <div class="slider-group">
-                    <div class="slider-header">
-                        <span>Planet Rotation (3D)</span>
-                        <span id="lbl-rotation">0°</span>
-                    </div>
-                    <input type="range" id="rng-rotation" min="0" max="360" value="0">
+                <div class="toggle-row">
+                    <span>Auto Rotate</span>
+                    <label class="switch">
+                        <input type="checkbox" id="chk-auto-rotate" checked>
+                        <span class="slider-switch"></span>
+                    </label>
                 </div>
 
                 <div class="toggle-row">
@@ -354,35 +305,34 @@
                 <div class="section-title">Lighting</div>
                 <div class="slider-group">
                     <div class="slider-header">
-                        <span>Shadow Intensity</span>
+                        <span>Sun Angle / Shadow</span>
                         <span id="lbl-shadow">50%</span>
                     </div>
-                    <input type="range" id="rng-shadow" min="0" max="95" value="50">
+                    <input type="range" id="rng-shadow" min="0" max="100" value="50">
                 </div>
             </div>
             
-            <button class="btn-action" id="btn-gen">Update View</button>
+            <button class="btn-action" id="btn-gen">Re-Generate</button>
 
         </div>
 
         <div class="dl-group">
             <button class="btn-dl" id="btn-download">
                 <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
-                Download Vector SVG
+                Download Texture Map
             </button>
         </div>
     </div>
 
-<script>
+<script type="module">
+import * as THREE from 'https://esm.sh/three';
+
 /**
- * SB PLANETGEN V10.3 - IPHONE/WEBKIT & PERFORMANCE UPGRADE
- * - Replaces live SVG Filters with Baked Textures (PNGs) generated on the fly.
- * - This fixes the Safari/iOS "Missing Terrain" bug caused by complex filter rendering limits.
- * - Drastically improves performance by removing per-frame noise calculations.
+ * SB PLANETGEN V12 - HIGH FIDELITY RECOVERY
  */
 
+/* --- DATA CONSTANTS --- */
 const LIQUIDS = [
-    // --- WATER & AQUEOUS (Blues/Teals) ---
     { name: "Water",           color: "#3b82f6", freeze: 0,    boil: 100,  tag: "H2O", cloud: "#ffffff", frozenColor: "#bfdbfe", type: "standard", gas: "Oxygen" },
     { name: "Salt Water",      color: "#1d4ed8", freeze: -2,   boil: 102,  tag: "H2O", cloud: "#f1f5f9", frozenColor: "#a5b4fc", type: "standard", gas: "Oxygen" },
     { name: "Mineral Water",   color: "#22d3ee", freeze: 0,    boil: 100,  tag: "H2O", cloud: "#ecfeff", frozenColor: "#cffafe", type: "standard", gas: "Oxygen" },
@@ -390,8 +340,6 @@ const LIQUIDS = [
     { name: "Brine",           color: "#0891b2", freeze: -21,  boil: 108,  tag: "H2O", cloud: "#f0f9ff", frozenColor: "#bae6fd", type: "standard", gas: "Chlorine" },
     { name: "Swamp Water",     color: "#3f6212", freeze: -1,   boil: 100,  tag: "Bio", cloud: "#d9f99d", frozenColor: "#65a30d", type: "organic",  gas: "Methane" },
     { name: "Mud Water",       color: "#78350f", freeze: 0,    boil: 100,  tag: "Si",  cloud: "#d6d3d1", frozenColor: "#57534e", type: "viscous",  gas: "Oxygen" },
-
-    // --- CRYOGENIC & VOLATILE (Cyans/Whites/Purples) ---
     { name: "Oxygen",          color: "#93c5fd", freeze: -218, boil: -183, tag: "O",   cloud: "#e0f2fe", frozenColor: "#3b82f6", type: "volatile", gas: "Oxygen" },
     { name: "Nitrogen",        color: "#818cf8", freeze: -210, boil: -195, tag: "N",   cloud: "#f1f5f9", frozenColor: "#6366f1", type: "volatile", gas: "Nitrogen" },
     { name: "Hydrogen",        color: "#f0abfc", freeze: -259, boil: -252, tag: "H",   cloud: "#ffffff", frozenColor: "#e879f9", type: "volatile", gas: "Hydrogen" },
@@ -399,8 +347,6 @@ const LIQUIDS = [
     { name: "Argon",           color: "#c084fc", freeze: -189, boil: -185, tag: "Ar",  cloud: "#e9d5ff", frozenColor: "#a855f7", type: "volatile", gas: "Argon" },
     { name: "Methane",         color: "#06b6d4", freeze: -182, boil: -161, tag: "C",   cloud: "#bae6fd", frozenColor: "#bae6fd", type: "volatile", gas: "Methane" },
     { name: "Propane",         color: "#67e8f9", freeze: -187, boil: -42,  tag: "C",   cloud: "#e0f2fe", frozenColor: "#22d3ee", type: "volatile", gas: "Propane" },
-
-    // --- FUELS & SOLVENTS (Yellows/Ambers/Clears) ---
     { name: "Ethanol",         color: "#f1f5f9", freeze: -114, boil: 78,   tag: "C",   cloud: "#f8fafc", frozenColor: "#cbd5e1", type: "volatile", gas: "Carbon Monoxide" },
     { name: "Acetone",         color: "#e2e8f0", freeze: -95,  boil: 56,   tag: "C",   cloud: "#f8fafc", frozenColor: "#94a3b8", type: "volatile", gas: "Carbon Monoxide" },
     { name: "Gasoline",        color: "#facc15", freeze: -60,  boil: 200,  tag: "C",   cloud: "#fef08a", frozenColor: "#eab308", type: "standard", gas: "Carbon Dioxide" },
@@ -409,8 +355,6 @@ const LIQUIDS = [
     { name: "Napalm",          color: "#ea580c", freeze: -30,  boil: 200,  tag: "C",   cloud: "#9a3412", frozenColor: "#7c2d12", type: "viscous",  gas: "Carbon Dioxide" },
     { name: "Crude Oil",       color: "#0f172a", freeze: -57,  boil: 200,  tag: "C",   cloud: "#52525b", frozenColor: "#020617", type: "viscous",  gas: "Carbon Monoxide" },
     { name: "Tar",             color: "#171717", freeze: -10,  boil: 300,  tag: "C",   cloud: "#404040", frozenColor: "#0a0a0a", type: "viscous",  gas: "Carbon Dioxide" },
-
-    // --- ACIDS, TOXINS & CHEMICALS (Greens/Neons/Pinks) ---
     { name: "Acid",            color: "#65a30d", freeze: 10,   boil: 337,  tag: "S",   cloud: "#d9f99d", frozenColor: "#365314", type: "acid",     gas: "Sulfur" },
     { name: "Vinegar",         color: "#fef08a", freeze: -2,   boil: 118,  tag: "C",   cloud: "#fef9c3", frozenColor: "#facc15", type: "acid",     gas: "Carbon Monoxide" },
     { name: "Ammonia",         color: "#2dd4bf", freeze: -77,  boil: -33,  tag: "N",   cloud: "#99f6e4", frozenColor: "#0d9488", type: "acid",     gas: "Nitrogen" },
@@ -422,27 +366,20 @@ const LIQUIDS = [
     { name: "Bromine",         color: "#991b1b", freeze: -7,   boil: 58,   tag: "Br",  cloud: "#7f1d1d", frozenColor: "#450a0a", type: "standard", gas: "Bromine" },
     { name: "Mercury",         color: "#94a3b8", freeze: -39,  boil: 357,  tag: "Hg",  cloud: "#e2e8f0", frozenColor: "#475569", type: "metal",    gas: "Mercury" },
     { name: "Gallium",         color: "#cbd5e1", freeze: 29,   boil: 2400, tag: "Ga",  cloud: "#f1f5f9", frozenColor: "#64748b", type: "metal",    gas: "Gallium" },
-
-    // --- BIOLOGICAL & ORGANIC (Reds/Browns/Pastels) ---
     { name: "Blood",           color: "#991b1b", freeze: -2,   boil: 100,  tag: "Bio", cloud: "#fca5a5", frozenColor: "#7f1d1d", type: "organic",  gas: "Steam" },
     { name: "Plasma",          color: "#fde68a", freeze: -1,   boil: 100,  tag: "Bio", cloud: "#fef3c7", frozenColor: "#d97706", type: "organic",  gas: "Steam" },
     { name: "Venom",           color: "#a21caf", freeze: -5,   boil: 120,  tag: "Bio", cloud: "#e879f9", frozenColor: "#701a75", type: "acid",     gas: "Unknown" },
     { name: "Honey",           color: "#ea580c", freeze: -20,  boil: 120,  tag: "Bio", cloud: "#fde68a", frozenColor: "#9a3412", type: "viscous",  gas: "Carbon Dioxide" },
-	
-    // --- MOLTEN & HIGH ENERGY (Reds/Oranges) ---
     { name: "Lava",            color: "#ef4444", freeze: 700,  boil: 3000, tag: "Si",  cloud: "#57534e", frozenColor: "#292524", type: "magma",    gas: "Silicate" },
     { name: "Magma",           color: "#c2410c", freeze: 800,  boil: 3200, tag: "Si",  cloud: "#44403c", frozenColor: "#1c1917", type: "magma",    gas: "Silicate" },
     { name: "Gold",            color: "#fbbf24", freeze: 1064, boil: 2700, tag: "Au",  cloud: "#fffbeb", frozenColor: "#b45309", type: "metal",    gas: "Vaporized Gold" },
     { name: "Iron",            color: "#f97316", freeze: 1538, boil: 2862, tag: "Fe",  cloud: "#ffedd5", frozenColor: "#c2410c", type: "metal",    gas: "Vaporized Iron" },
     { name: "Copper",          color: "#f87171", freeze: 1085, boil: 2562, tag: "Cu",  cloud: "#fecaca", frozenColor: "#991b1b", type: "metal",    gas: "Vaporized Copper" },
     { name: "Lead",            color: "#9ca3af", freeze: 327,  boil: 1749, tag: "Pb",  cloud: "#e5e7eb", frozenColor: "#4b5563", type: "metal",    gas: "Vaporized Lead" },
-
-    // --- HOUSEHOLD & QUIRKY (Varied) ---
     { name: "Chocolate",       color: "#451a03", freeze: 25,   boil: 150,  tag: "Bio", cloud: "#d6d3d1", frozenColor: "#290e02", type: "viscous",  gas: "Carbon Dioxide" },
 ];
 
 const SOLIDS = [
-    // --- ROCKS & GEOLOGY (Greys/Browns) ---
     { name: "Stone",           color: "#78716c", tag: "Si", roughness: 1.0, type: "rock", melt: 1200 },
     { name: "Basalt",          color: "#27272a", tag: "Si", roughness: 1.0, type: "rock", melt: 1100 },
     { name: "Granite",         color: "#a8a29e", tag: "Si", roughness: 1.3, type: "rock", melt: 1215 },
@@ -457,8 +394,6 @@ const SOLIDS = [
     { name: "Coal",            color: "#0f172a", tag: "C",  roughness: 0.8, type: "rock", melt: 3500 },
     { name: "Chalk",           color: "#e5e7eb", tag: "C",  roughness: 0.6, type: "rock", melt: 825 },
     { name: "Shale",           color: "#334155", tag: "Si", roughness: 0.7, type: "rock", melt: 1100 },
-
-    // --- SOILS & PARTICLES (Earth Tones) ---
     { name: "Dirt",            color: "#573c29", tag: "Si", roughness: 1.0, type: "dust", melt: 1100 },
     { name: "Mud",             color: "#451a03", tag: "Si", roughness: 0.9, type: "dust", melt: 1100 },
     { name: "Clay",            color: "#9a3412", tag: "Si", roughness: 0.6, type: "dust", melt: 1000 },
@@ -469,8 +404,6 @@ const SOLIDS = [
     { name: "Ash",             color: "#d6d3d1", tag: "C",  roughness: 1.4, type: "dust", melt: 1000 },
     { name: "Soot",            color: "#171717", tag: "C",  roughness: 1.2, type: "dust", melt: 3000 },
     { name: "Salt",            color: "#e5e7eb", tag: "Na", roughness: 0.8, type: "dust", melt: 801 },
-
-    // --- ORES & METALS (Metallics/Reds/Golds) ---
     { name: "Iron Ore",        color: "#7f1d1d", tag: "Fe", roughness: 1.2, type: "metal", melt: 1538 },
     { name: "Magnetite",       color: "#1e293b", tag: "Fe", roughness: 1.1, type: "metal", melt: 1590 },
     { name: "Rust",            color: "#b45309", tag: "Fe", roughness: 1.5, type: "metal", melt: 1500 },
@@ -487,8 +420,6 @@ const SOLIDS = [
     { name: "Tungsten",        color: "#1f2937", tag: "W",  roughness: 1.0, type: "metal", melt: 3422 },
     { name: "Cobalt",          color: "#1e3a8a", tag: "Co", roughness: 1.1, type: "metal", melt: 1495 },
     { name: "Uranium",         color: "#166534", tag: "U",  roughness: 1.0, type: "metal", melt: 1132 },
-
-    // --- GEMSTONES & CRYSTALS (Vibrant) ---
     { name: "Quartz",          color: "#e2e8f0", tag: "Si", roughness: 1.1, type: "glass", melt: 1670 },
     { name: "Diamond",         color: "#cffafe", tag: "C",  roughness: 1.5, type: "glass", melt: 4000 },
     { name: "Ruby",            color: "#dc2626", tag: "Al", roughness: 1.2, type: "glass", melt: 2050 },
@@ -499,15 +430,11 @@ const SOLIDS = [
     { name: "Opal",            color: "#fda4af", tag: "Si", roughness: 0.9, type: "glass", melt: 1000 },
     { name: "Malachite",       color: "#064e3b", tag: "Cu", roughness: 1.0, type: "rock",  melt: 1100 },
     { name: "Sulfur",          color: "#fde047", tag: "S",  roughness: 0.8, type: "rock",  melt: 115 },
-
-    // --- ICES (Whites/Blues) ---
     { name: "Ice",             color: "#bae6fd", tag: "H2O",roughness: 0.7, type: "ice",   melt: 0 },
     { name: "Blue Ice",        color: "#60a5fa", tag: "H2O",roughness: 0.9, type: "ice",   melt: 0 },
     { name: "Permafrost",      color: "#9ca3af", tag: "Si", roughness: 1.1, type: "ice",   melt: 0 },
     { name: "Nitrogen Ice",    color: "#c7d2fe", tag: "N",  roughness: 0.5, type: "ice",   melt: -210 },
     { name: "Methane Ice",     color: "#38bdf8", tag: "C",  roughness: 0.5, type: "ice",   melt: -182 },
-
-    // --- BIOLOGICAL & ORGANIC (Naturals) ---
     { name: "Grass",           color: "#4ade80", tag: "Bio", roughness: 0.5, type: "organic", melt: 100 },
     { name: "Moss",            color: "#3f6212", tag: "Bio", roughness: 1.2, type: "organic", melt: 100 },
     { name: "Bone",            color: "#e5e5e5", tag: "Bio", roughness: 0.9, type: "organic", melt: 200 },
@@ -515,8 +442,6 @@ const SOLIDS = [
     { name: "Chitin",          color: "#92400e", tag: "Bio", roughness: 0.7, type: "organic", melt: 260 },
     { name: "Mycelium",        color: "#ddd6fe", tag: "Bio", roughness: 1.2, type: "organic", melt: 150 },
     { name: "Coral",           color: "#f87171", tag: "Bio", roughness: 1.3, type: "organic", melt: 900 },
-
-    // --- ARTIFICIAL & MAN-MADE (Varied) ---
     { name: "Glass",           color: "#e0f2fe", tag: "Si", roughness: 0.1, type: "glass", melt: 1400 },
     { name: "Concrete",        color: "#d4d4d8", tag: "Si", roughness: 0.9, type: "rock",  melt: 1500 },
     { name: "Asphalt",         color: "#18181b", tag: "C",  roughness: 0.7, type: "rock",  melt: 175 },
@@ -557,25 +482,15 @@ function hslToHex(h, s, l) {
 
 function artColor(hex, lShift, sShift = 0, hShift = 0) {
     const hsl = hexToHSL(hex);
-    
-    // Calculate initial target lightness
     let targetL = hsl.l + lShift;
-    
-    // DIMINISHING RETURNS FOR HIGHLIGHTS
-    // If we are pushing brightness high (over 85%), we apply a soft compression curve
-    // so we never quite hit 100% white. This preserves detail in the highest peaks.
     if (lShift > 0 && targetL > 85) {
         const excess = targetL - 85;
-        // Asymptotic compression: maps 0->Infinity to 0->12
-        // This ensures the max value is 85 + 12 = 97.
         targetL = 85 + (excess / (excess + 15)) * 12;
     }
-    
     let newL = Math.max(5, Math.min(98, targetL));
     let newS = Math.max(0, Math.min(100, hsl.s + sShift));
     let newH = (hsl.h + hShift) % 360;
     if (newH < 0) newH += 360;
-    
     return hslToHex(newH, newS, newL);
 }
 
@@ -595,44 +510,47 @@ function createRNG(str) {
     };
 }
 
+/* --- STATE MANAGEMENT --- */
 const state = {
     seed: 'INIT',
-    genId: 0,
     data: null, 
     waterLevel: 50,
     shadow: 50,
     cloudsEnabled: true,
-    rotation: 0, 
-    layerThresholds: []
+    autoRotate: true,
+    layerThresholds: [],
+    // 3D Physics
+    rotationSpeed: 0.1,
+    isDragging: false,
+    lastX: 0,
+    velocity: 0.5
 };
 
+/* --- DOM REFERENCES --- */
 const dom = {
-    svg: document.getElementById('render-target'),
     defs: document.querySelector('defs'),
-    gAxis: document.getElementById('planet-axis-group'),
-    gLensContainer: document.getElementById('planet-lens-container'),
-    gSurfaceSlider: document.getElementById('planet-surface-slider'),
-    gTerrain: document.getElementById('group-terrain'),
-    gLiquid: document.getElementById('group-liquid'),
-    gIce: document.getElementById('group-ice'),
-    gBio: document.getElementById('group-bio'),
-    gCloudsRotator: document.getElementById('layer-clouds-rotator'),
-    gGeoStructure: document.getElementById('geo-structure-layer'),
-    gRingsBack: document.getElementById('layer-rings-back'),
-    gRingsFront: document.getElementById('layer-rings-front'),
-    rimLight: document.getElementById('rim-light'),
-    terminator: document.getElementById('terminator'),
+    // Baker Groups
+    bTerrain: document.getElementById('bake-group-terrain'),
+    bLiquid: document.getElementById('bake-group-liquid'),
+    bIce: document.getElementById('bake-group-ice'),
+    bBio: document.getElementById('bake-group-bio'),
+    bClouds: document.getElementById('bake-group-clouds'),
+    bBg: document.getElementById('bake-bg'),
+    // SVGs
+    svgSurface: document.getElementById('surface-baker'),
+    svgClouds: document.getElementById('cloud-baker'),
+    // Inputs
     seedInput: document.getElementById('seed-input'),
     btnRnd: document.getElementById('btn-rnd'),
     btnGen: document.getElementById('btn-gen'),
     btnDownload: document.getElementById('btn-download'),
     rngWater: document.getElementById('rng-water'),
-    rngRotation: document.getElementById('rng-rotation'),
     rngShadow: document.getElementById('rng-shadow'),
     chkClouds: document.getElementById('chk-clouds'),
+    chkAutoRotate: document.getElementById('chk-auto-rotate'),
     lblWater: document.getElementById('lbl-water'),
-    lblRotation: document.getElementById('lbl-rotation'),
     lblShadow: document.getElementById('lbl-shadow'),
+    // Readouts
     valTemp: document.getElementById('val-temp'),
     valLiquid: document.getElementById('val-liquid'),
     valSolid: document.getElementById('val-solid'),
@@ -640,63 +558,228 @@ const dom = {
     valLife: document.getElementById('val-life'),
 };
 
-/**
- * TEXTURE BAKING SYSTEM
- * Renders SVG Filters to PNG Blobs so the GPU doesn't have to calculate noise every frame.
- */
-let textureCache = [];
-function clearTextureCache() {
-    textureCache.forEach(url => URL.revokeObjectURL(url));
-    textureCache = [];
+/* --- THREE.JS SETUP --- */
+const canvas = document.querySelector('#webgl-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
+camera.position.z = 3.8;
+
+// Planet Group (Standard Rotation)
+const planetGroup = new THREE.Group();
+scene.add(planetGroup);
+
+// Sphere (Surface)
+const geometry = new THREE.SphereGeometry(1, 128, 128); // Higher poly for smoothness
+const material = new THREE.MeshStandardMaterial({ 
+    roughness: 1.0, 
+    metalness: 0.0,
+});
+const planetMesh = new THREE.Mesh(geometry, material);
+planetGroup.add(planetMesh);
+
+// Sphere (Clouds)
+const cloudGeo = new THREE.SphereGeometry(1.025, 128, 128);
+const cloudMat = new THREE.MeshStandardMaterial({ 
+    transparent: true, opacity: 0.9, roughness: 1.0, side: THREE.DoubleSide 
+});
+const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+planetGroup.add(cloudMesh);
+
+// Atmosphere Glow (Shader)
+const atmosGeo = new THREE.SphereGeometry(1.18, 64, 64);
+const atmosMat = new THREE.ShaderMaterial({
+    uniforms: {
+        c: { type: "f", value: 0.3 },
+        p: { type: "f", value: 4.5 },
+        glowColor: { type: "c", value: new THREE.Color(0x3b82f6) },
+        viewVector: { type: "v3", value: camera.position }
+    },
+    vertexShader: `
+        uniform vec3 viewVector;
+        varying float intensity;
+        void main() {
+            vec3 vNormal = normalize(normalMatrix * normal);
+            vec3 vNormel = normalize(normalMatrix * viewVector);
+            intensity = pow(0.65 - dot(vNormal, vNormel), 4.0);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform vec3 glowColor;
+        varying float intensity;
+        void main() {
+            vec3 glow = glowColor * intensity;
+            gl_FragColor = vec4(glow, intensity * 0.8);
+        }
+    `,
+    side: THREE.BackSide,
+    blending: THREE.AdditiveBlending,
+    transparent: true
+});
+const atmosMesh = new THREE.Mesh(atmosGeo, atmosMat);
+planetGroup.add(atmosMesh);
+
+// Rings (High Res Plane)
+const ringGeo = new THREE.PlaneGeometry(3.5, 3.5);
+const ringMat = new THREE.MeshBasicMaterial({ 
+    side: THREE.DoubleSide, transparent: true, opacity: 0.9, map: null
+});
+const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+ringMesh.rotation.x = -Math.PI / 2;
+ringMesh.visible = false;
+planetGroup.add(ringMesh);
+
+// Lights
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.02); // Start dark
+scene.add(ambientLight);
+const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
+sunLight.position.set(5, 2, 5);
+scene.add(sunLight);
+
+/* --- RESIZE HANDLER --- */
+window.addEventListener('resize', () => {
+    camera.aspect = canvas.clientWidth / canvas.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+});
+
+/* --- GENERATION HELPERS --- */
+
+// Re-creates the full 18-step palette for deep terrain detail
+function generateDeepPalette(hex) {
+    const s = hex;
+    return [
+        artColor(s, -60, 0, -27),
+        artColor(s, -43, -4, -20),
+        artColor(s, -30, -8, -14),
+        s,
+        artColor(s, -8, -6, -6),
+        artColor(s, -4, -8, -2),
+        artColor(s, 0, -7, 0),
+        artColor(s, 4, -7, 3),
+        artColor(s, 11, -8, 7),
+        artColor(s, 13, -11, 11),
+        artColor(s, 21, -12, 16),
+        artColor(s, 21, -12, 16),
+        artColor(s, 28, -14, 21),
+        artColor(s, 28, -14, 21),
+        artColor(s, 28, -14, 21),
+        artColor(s, 36, -16, 26),
+        artColor(s, 36, -16, 26),
+        artColor(s, 42, -17, 32)
+    ];
 }
 
-async function bakeSVG(width, height, defs, content) {
-    const xml = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-        <defs>${defs}</defs>
-        ${content}
-    </svg>`;
+async function bakeSVGToTexture(svgElement) {
+    const xml = new XMLSerializer().serializeToString(svgElement);
     const blob = new Blob([xml], {type: "image/svg+xml;charset=utf-8"});
     const url = URL.createObjectURL(blob);
     
     return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            canvas.toBlob(b => {
-                const finalUrl = URL.createObjectURL(b);
-                textureCache.push(finalUrl);
-                URL.revokeObjectURL(url);
-                resolve(finalUrl);
-            }, 'image/png');
+            const tex = new THREE.Texture(img);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            tex.needsUpdate = true;
+            URL.revokeObjectURL(url);
+            resolve(tex);
         };
-        img.onerror = () => {
-            console.error("Failed to bake texture");
-            resolve(null);
-        }
         img.src = url;
     });
 }
 
-function createSVGLensURI() {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-        <defs>
-            <radialGradient id="lens-grad" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="#808080"/>
-                <stop offset="20%" stop-color="#909090"/>
-                <stop offset="40%" stop-color="#a8a8a8"/>
-                <stop offset="60%" stop-color="#c8c8c8"/>
-                <stop offset="80%" stop-color="#e8e8e8"/>
-                <stop offset="100%" stop-color="#ffffff"/>
-            </radialGradient>
-        </defs>
-        <rect width="512" height="512" fill="url(#lens-grad)"/>
-    </svg>`;
-    return "data:image/svg+xml;base64," + btoa(svg);
+// Logic for Cloud Spines (Restored)
+function generateCloudsSVG(rng, data) {
+    const R = 640; 
+    const generateCloudSpine = (yBase, width, xOffset) => {
+        const points = [];
+        const steps = 60;
+        const startX = -width / 2 + xOffset;
+        const stepSize = width / steps;
+        let yDrift = 0;
+        for (let i = 0; i <= steps; i++) {
+            const xRel = startX + (i * stepSize);
+            const xRatio = xRel / R;
+            const sphereCurve = (xRatio * xRatio) * yBase * -0.8; 
+            let y = yBase + sphereCurve;
+            yDrift += (rng() - 0.5) * 1.0;
+            yDrift *= 0.95;
+            y += yDrift;
+            points.push({ x: 1024 + xRel * 1.5, y: 512 + y }); // Scale to 2048x1024
+        }
+        return points;
+    };
+
+    const generateCloudShapeFromSpine = (spinePoints, options = {}) => {
+        const { baseThickness=30, thicknessVariance=10, edgeNoise=10, taperPower=0.5 } = options;
+        if (spinePoints.length < 3) return "";
+        const topPoints = [], botPoints = [];
+        let thickness = baseThickness;
+        for (let i = 0; i < spinePoints.length; i++) {
+            const p_curr = spinePoints[i];
+            const p_next = spinePoints[Math.min(spinePoints.length-1, i+1)];
+            const p_prev = spinePoints[Math.max(0, i-1)];
+            const dx = p_next.x - p_prev.x, dy = p_next.y - p_prev.y;
+            let nx = -dy, ny = dx;
+            const len = Math.sqrt(nx*nx+ny*ny);
+            if (len > 0) { nx /= len; ny /= len; }
+            const progress = i / (spinePoints.length - 1);
+            const taper = Math.sin(progress * Math.PI); 
+            const thickMod = Math.pow(taper, taperPower);
+            thickness += (rng() - 0.5) * (thicknessVariance / 5);
+            thickness = Math.max(5, thickness); 
+            const currentThick = thickness * thickMod;
+            const jag = (rng() - 0.5) * edgeNoise * thickMod;
+            topPoints.push({ x: p_curr.x + nx * (currentThick * 0.5 + jag), y: p_curr.y + ny * (currentThick * 0.5 + jag) });
+            botPoints.push({ x: p_curr.x - nx * (currentThick * 0.5 + jag), y: p_curr.y - ny * (currentThick * 0.5 + jag) });
+        }
+        let d = `M ${topPoints[0].x.toFixed(1)} ${topPoints[0].y.toFixed(1)}`;
+        for (let i = 1; i < topPoints.length; i++) d += ` L ${topPoints[i].x.toFixed(1)} ${topPoints[i].y.toFixed(1)}`;
+        for (let i = botPoints.length - 1; i >= 0; i--) d += ` L ${botPoints[i].x.toFixed(1)} ${botPoints[i].y.toFixed(1)}`;
+        d += " Z";
+        return d;
+    };
+
+    let allPaths = "";
+    const clusterCount = Math.floor(rng() * 3) + 3;
+    const range = 1.85; 
+    const zoneSize = range / clusterCount;
+    let tileInner = "";
+    
+    // Generate horizontal bands
+    for (let i = 0; i < clusterCount; i++) {
+        const zoneTop = -(range/2) + (i * zoneSize);
+        const latPos = zoneTop + (rng() * zoneSize * 0.8) + (zoneSize * 0.1);
+        const yBase = latPos * R;
+        const maxChord = Math.sqrt(Math.max(0, R*R - yBase*yBase)) * 2;
+        const width = maxChord * (0.8 + rng() * 0.8);
+        const maxOffset = (maxChord - width) / 2;
+        const xOffset = (rng() * maxOffset * 2) - maxOffset;
+        const dist = Math.abs(latPos);
+        const col = artColor(data.cloudHex, dist * -15, dist * -5);
+        
+        const spine = generateCloudSpine(yBase, width, xOffset);
+        // Draw layers
+        for(let l=0; l<3; l++) {
+            const path = generateCloudShapeFromSpine(spine, {
+                baseThickness: (50 - l*10),
+                edgeNoise: 15,
+                taperPower: 0.4
+            });
+            tileInner += `<path d="${path}" fill="${col}" fill-opacity="${0.3 + l*0.1}" />`;
+        }
+    }
+    // Duplicate for wrapping (simple approach)
+    allPaths += `<g transform="translate(-2048,0)">${tileInner}</g>`;
+    allPaths += `<g>${tileInner}</g>`;
+    allPaths += `<g transform="translate(2048,0)">${tileInner}</g>`;
+    return allPaths;
 }
 
 function generatePlanetData(rng) {
@@ -707,15 +790,14 @@ function generatePlanetData(rng) {
     const poleOffset = Math.floor(rng() * 80 + 40);
     const maxT = baseTemp + equatorOffset;
     const minT = baseTemp - poleOffset;
-    const CtoK = (c) => c + 273.15;
-    const baseK = CtoK(baseTemp);
     const validSolids = SOLIDS.filter(s => {
         if (s.type === 'ice' && baseTemp > s.melt) return false;
         return true;
     });
     let solid = validSolids.length > 0 ? validSolids[Math.floor(rng() * validSolids.length)] : { name: "Scorched Crust", color: "#1a0500", tag: "Si", roughness: 1.2, type: "rock", melt: 9999 };
-    const solidMeltK = CtoK(solid.melt);
+    const solidMeltK = solid.melt + 273.15;
     let solidName = solid.name;
+    const baseK = baseTemp + 273.15;
     if (baseK > solidMeltK * 3) {
         solidName = `Molten ${solid.name}`;
         solid = { ...solid, color: artColor(solid.color, 8, 5, 5) };
@@ -726,7 +808,7 @@ function generatePlanetData(rng) {
         liquid = potentialLiquids[Math.floor(rng() * potentialLiquids.length)];
         oceanName = liquid.name;
         cloudColor = liquid.cloud;
-        const liquidBoilK = CtoK(liquid.boil);
+        const liquidBoilK = liquid.boil + 273.15;
         if (baseK > liquidBoilK * 3) {
             liquidState = "sediment";
             oceanName = `${liquid.name} Sediment`;
@@ -765,41 +847,18 @@ function generatePlanetData(rng) {
     } else {
         atmosName = "Vacuum";
     }
-    
-    // --- LIFE GENERATION LOGIC ---
     let hasLife = false, lifeType = "None", bioColor = null, bioMinT = 0, bioMaxT = 0;
-    
     if (liquidState === "liquid") {
-        // Carbon-Based Life: Needs Water (H2O) and moderate temps
         if (liquid.tag === "H2O" && baseTemp > -20 && baseTemp < 80) {
-            hasLife = true; 
-            lifeType = "Carbon-Based"; 
-            bioColor = "#10b981"; // Green
-            bioMinT = -20; bioMaxT = 80;
-        } 
-        // Silicon-Based Life: Needs Silicon (Si) solid and high temps
-        else if (solid.tag === "Si" && baseTemp > 400 && baseTemp < 1200) {
-            hasLife = true; 
-            lifeType = "Silicon-Based"; 
-            bioColor = "#9333ea"; // Purple
-            bioMinT = 400; bioMaxT = 1200;
-        }
-        // Hydrocarbon Life: Needs Methane/Ethane (C) and very cold temps
-        else if (liquid.tag === "C" && baseTemp < -100) {
-            hasLife = true;
-            lifeType = "Hydrocarbon-Based";
-            bioColor = "#f43f5e"; // Rose
-            bioMinT = -200; bioMaxT = -100;
-        }
-        // Exotic/Radiotrophic Life: Needs Radiation (U)
-        else if (solid.tag === "U" || solid.tag === "X") {
-            hasLife = true;
-            lifeType = "Radiotrophic";
-            bioColor = "#bef264"; // Lime Neon
-            bioMinT = baseTemp - 50; bioMaxT = baseTemp + 50;
+            hasLife = true; lifeType = "Carbon-Based"; bioColor = "#10b981"; bioMinT = -20; bioMaxT = 80;
+        } else if (solid.tag === "Si" && baseTemp > 400 && baseTemp < 1200) {
+            hasLife = true; lifeType = "Silicon-Based"; bioColor = "#9333ea"; bioMinT = 400; bioMaxT = 1200;
+        } else if (liquid.tag === "C" && baseTemp < -100) {
+            hasLife = true; lifeType = "Hydrocarbon-Based"; bioColor = "#f43f5e"; bioMinT = -200; bioMaxT = -100;
+        } else if (solid.tag === "U" || solid.tag === "X") {
+            hasLife = true; lifeType = "Radiotrophic"; bioColor = "#bef264"; bioMinT = baseTemp - 50; bioMaxT = baseTemp + 50;
         }
     }
-
     const getLatForTemp = (t) => (maxT === minT) ? 0.5 : (maxT - t) / (maxT - minT);
     let latBoil = getLatForTemp(liquid.boil || 9999);
     let latFreeze = getLatForTemp(liquid.freeze || 9998);
@@ -808,742 +867,392 @@ function generatePlanetData(rng) {
     if (hasLife) suggestedWater = Math.floor(rng() * 20 + 45);
     return {
         baseTemp, maxT, minT, solid, liquid, latBoil, latFreeze, oceanName, solidName, atmosName, atmosDensity,
-        cloudHex: cloudColor, hasLife, lifeType, bioColor, bioMinT, bioMaxT, tilt: rng() * 45, rings: rng() < 0.10,
+        cloudHex: cloudColor, hasLife, lifeType, bioColor, bioMinT, bioMaxT, rings: rng() < 0.15,
         baseFreq: 0.006 - ((solid.roughness * 0.5) * 0.0045), suggestedWater, roughness: solid.roughness * (0.5 + rng())
     };
 }
 
-function generatePalette(data) {
-    const s = data.solid.color;
-    return [
-        // Deep shadows and lowlands
-        artColor(s, -60, 0, -27),    // N=0: No change
-        artColor(s, -43, -4, -20),   // N=1: +3, +1, +2
-        artColor(s, -30, -8, -14),   // N=2: +5, +2, +3
-        // Base color
-        s,
-        // Brighter as we move inland
-        artColor(s, -8, -6, -6),     // N=3: +8, +4, +5
-        artColor(s, -4, -8, -2),     // N=4: +10, +5, +6
-        artColor(s, 0, -7, 0),       // N=5: +13, +6, +8
-        artColor(s, 4, -7, 3),       // N=6: +15, +7, +11
-        artColor(s, 11, -8, 7),      // N=7: +18, +8, +11
-        artColor(s, 13, -11, 11),    // N=8: +20, +10, +12
-        artColor(s, 21, -12, 16),    // N=9: +23, +11, +14
-        artColor(s, 21, -12, 16),    // Duplicate: No offset shift
-        artColor(s, 28, -14, 21),    // N=10: +25, +12, +15
-        artColor(s, 28, -14, 21),    // Duplicate
-        artColor(s, 28, -14, 21),    // Duplicate
-        artColor(s, 36, -16, 26),    // N=11: +28, +13, +17
-        artColor(s, 36, -16, 26),    // Duplicate
-        artColor(s, 42, -17, 32)     // N=12: +30, +14, +18
-    ];
-}
-
-function getTagHtml(tag) {
-    // Map tags to 6 generic color classes
-    const colorMap = {
-        'C': 'tag-c', 'H2O': 'tag-si', 'Bio': 'tag-bio',
-        'Fe': 'tag-fe', 'Au': 'tag-fe', 'Cu': 'tag-fe', 'Ag': 'tag-fe', 'Pb': 'tag-fe', 'Sn': 'tag-fe', 'Al': 'tag-fe', 'Ti': 'tag-fe', 'W': 'tag-fe', 'Co': 'tag-fe',
-        'Si': 'tag-fe', 'S': 'tag-fe', 'Na': 'tag-fe',
-        'H': 'tag-si', 'He': 'tag-si', 'O': 'tag-si', 'N': 'tag-si', 'Ar': 'tag-si', 'Cl': 'tag-si', 'Br': 'tag-si', 'D2O': 'tag-si',
-        'U': 'tag-x', 'Hg': 'tag-x', 'Ga': 'tag-x', 'X': 'tag-x'
-    };
-    
-    const cls = colorMap[tag] || 'tag-none';
-    return `<span class="tag ${cls}">[${tag}]</span>`;
-}
-
 async function fullRebuild() {
-    state.genId++;
-    const currentGenId = state.genId;
     dom.btnGen.disabled = true;
-    dom.btnGen.innerText = "Rendering...";
-
-    clearTextureCache();
-    dom.defs.querySelectorAll('.dynamic-def').forEach(el => el.remove());
+    dom.btnGen.innerText = "Simulating...";
     
-    // Clear display
-    dom.gTerrain.innerHTML = '';
-    dom.gLiquid.innerHTML = '';
-    dom.gIce.innerHTML = '';
-    dom.gBio.innerHTML = '';
-    dom.gCloudsRotator.innerHTML = ''; 
-    dom.gGeoStructure.innerHTML = '';
-    dom.gRingsBack.innerHTML = '';
-    dom.gRingsFront.innerHTML = '';
+    // Clear SVGs
+    dom.bTerrain.innerHTML = '';
+    dom.bLiquid.innerHTML = '';
+    dom.bIce.innerHTML = '';
+    dom.bBio.innerHTML = '';
+    dom.bClouds.innerHTML = '';
+    dom.defs.querySelectorAll('.dynamic-def').forEach(el => el.remove());
 
     const rng = createRNG(state.seed);
     state.data = generatePlanetData(rng);
     const data = state.data;
-    const palette = generatePalette(data);
+    const palette = generateDeepPalette(data.solid.color); // 18 colors!
 
     // Update Text UI
-    dom.valTemp.innerHTML = `${data.baseTemp}°C <span style="font-size: 0.8em; opacity: 0.7;">(<span style="color: #60a5fa">${data.minT}°</span> / <span style="color: #f87171">${data.maxT}°</span>)</span>`;
-	dom.valLiquid.innerHTML = data.oceanName + getTagHtml(data.liquid.tag);
-    dom.valSolid.innerHTML = data.solidName + getTagHtml(data.solid.tag);
+    dom.valTemp.innerHTML = `${data.baseTemp}°C`;
+    dom.valLiquid.innerHTML = data.oceanName;
+    dom.valSolid.innerHTML = data.solidName;
     dom.valAtmos.innerText = data.atmosName;
-    
-    if(data.hasLife) {
-        dom.valLife.innerHTML = data.lifeType;
-        dom.valLife.className = "data-val tag-life";
-    } else {
-        dom.valLife.innerText = "STERILE";
-        dom.valLife.className = "data-val tag-dead";
-    }
+    dom.valLife.innerHTML = data.hasLife ? data.lifeType : "STERILE";
+    dom.valLife.className = data.hasLife ? "data-val tag-life" : "data-val tag-dead";
 
-    // --- STATIC DEFINITIONS ---
-    dom.gAxis.setAttribute("transform", `rotate(${data.tilt}, 500, 500)`);
+    // Update Atmosphere Glow Color
+    atmosMat.uniforms.glowColor.value.set(data.cloudHex);
+    atmosMat.uniforms.c.value = 0.2 + (data.atmosDensity * 0.3);
+    atmosMesh.visible = data.atmosDensity > 0.05;
 
-    // Lens Filter (Static Gradient + Displacement) - We keep this live as it's efficient enough and needs to displace content
-    const lensData = createSVGLensURI(); 
-    const lensFilterID = `lens-${state.seed}`;
-    const lensFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
-    lensFilter.setAttribute("id", lensFilterID);
-    lensFilter.setAttribute("x", "0"); lensFilter.setAttribute("y", "0");
-    lensFilter.setAttribute("width", "1000"); lensFilter.setAttribute("height", "1000");
-    lensFilter.setAttribute("filterUnits", "userSpaceOnUse");
-    lensFilter.setAttribute("color-interpolation-filters", "sRGB");
-    lensFilter.classList.add('dynamic-def');
-    lensFilter.innerHTML = `
-        <feImage href="${lensData}" result="lensMap" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none"/>
-        <feDisplacementMap in="SourceGraphic" in2="lensMap" scale="120" xChannelSelector="R" yChannelSelector="G" />
+    // 1. GENERATE NOISE PATTERN (TILED 1024x1024)
+    // Complex Noise Logic Restored
+    const noiseID = `noise-${state.seed}`;
+    const noiseFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
+    noiseFilter.setAttribute("id", noiseID);
+    noiseFilter.setAttribute("x", "0%"); noiseFilter.setAttribute("y", "0%"); 
+    noiseFilter.setAttribute("width", "100%"); noiseFilter.setAttribute("height", "100%");
+    noiseFilter.classList.add('dynamic-def');
+    noiseFilter.innerHTML = `
+        <feTurbulence type="fractalNoise" baseFrequency="${data.baseFreq}" numOctaves="6" seed="${Math.floor(rng()*100)}" stitchTiles="stitch" result="turb"/>
+        <feColorMatrix type="saturate" values="0" in="turb" result="gray"/>
+        <feComponentTransfer in="gray" result="contrasted">
+            <feFuncR type="linear" slope="3" intercept="-1"/>
+            <feFuncG type="linear" slope="3" intercept="-1"/>
+            <feFuncB type="linear" slope="3" intercept="-1"/>
+        </feComponentTransfer>
     `;
-    dom.defs.appendChild(lensFilter);
-    dom.gLensContainer.setAttribute("filter", `url(#${lensFilterID})`);
+    dom.defs.appendChild(noiseFilter);
 
-    // --- BAKE TEXTURES ---
+    // Create Pattern Def used by all layers
+    const noisePatternId = `pat-noise-${state.seed}`;
+    const pattern = document.createElementNS("http://www.w3.org/2000/svg", "pattern");
+    pattern.setAttribute("id", noisePatternId);
+    pattern.setAttribute("patternUnits", "userSpaceOnUse");
+    pattern.setAttribute("width", "1024"); pattern.setAttribute("height", "1024");
+    pattern.classList.add('dynamic-def');
+    pattern.innerHTML = `<rect width="1024" height="1024" filter="url(#${noiseID})"/>`;
+    dom.defs.appendChild(pattern);
+
+    // 2. TERRAIN LAYERS (DEEP ITERATION)
+    // We create a mask for every color in the palette
+    state.layerThresholds = [];
+    dom.bBg.setAttribute("fill", palette[0]);
     
-    // 1. TERRA NOISE (Grayscale)
-    const terraNoiseDef = `
-        <filter id="bake-noise" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
-            <feTurbulence type="fractalNoise" baseFrequency="${data.baseFreq}" numOctaves="6" seed="${Math.floor(rng() * 1000)}" 
-                stitchTiles="stitch" result="turb"/>
-            <feColorMatrix type="saturate" values="0" in="turb" result="gray"/>
-            <!-- IPHONE FIX: Reset Alpha to 1.0 to prevent pre-multiplication math errors in WebKit -->
-            <feColorMatrix in="gray" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0 1" result="bw"/>
-            <feComponentTransfer in="bw" result="contrasted">
-                <feFuncR type="linear" slope="4" intercept="-1.5"/>
-                <feFuncG type="linear" slope="4" intercept="-1.5"/>
-                <feFuncB type="linear" slope="4" intercept="-1.5"/>
-            </feComponentTransfer>
-        </filter>
-    `;
-    const terraContent = `<rect width="3000" height="1000" filter="url(#bake-noise)"/>`;
-    const terraNoisePromise = bakeSVG(3000, 1000, terraNoiseDef, terraContent);
-
-    // 2. ICE TEXTURE (Colored + Noise)
-    const iceNoiseDef = `
-        <filter id="bake-ice" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
-             <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="4" seed="500" result="frost"/>
-             <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.4 0" />
-        </filter>
-    `;
-    const iceContent = `<rect width="3000" height="1000" fill="${data.liquid.frozenColor}" filter="url(#bake-ice)"/>`;
-    const iceTexturePromise = bakeSVG(3000, 1000, iceNoiseDef, iceContent);
-
-    // 3. CLOUDS (Vectors + Noise)
-    let cloudTexturePromise = Promise.resolve(null);
-    if (state.cloudsEnabled && data.atmosDensity > 0.05) {
-        const cloudFilterDef = `
-            <filter id="bake-cloud" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
-                <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="5" result="noise"/>
-                <feDisplacementMap in="SourceGraphic" in2="noise" scale="25" result="distorted"/>
-                <feGaussianBlur in="distorted" stdDeviation="2" result="blurred"/> 
-                <feComponentTransfer in="blurred" result="clouds">
-                    <feFuncA type="linear" slope="5" intercept="-1.5"/> 
-                </feComponentTransfer>
-            </filter>
-        `;
-        const cloudSVGContent = generateCloudsSVG(rng, data);
-        const cloudRenderContent = `<g filter="url(#bake-cloud)">${cloudSVGContent}</g>`;
-        cloudTexturePromise = bakeSVG(3000, 1000, cloudFilterDef, cloudRenderContent);
-    }
-
-    // AWAIT RENDERS
-    const [terraURL, iceURL, cloudURL] = await Promise.all([terraNoisePromise, iceTexturePromise, cloudTexturePromise]);
-
-    if (state.genId !== currentGenId) return; // Discard if new gen started
-
-    // --- ASSEMBLE SCENE ---
-
-    // Geology (Vector - Fast enough to keep live)
-//    generateGeology(rng, data);
-
-    // Solid Terrain Layers
-    generateSolidLayers(rng, data, palette, terraURL);
-
-    // Liquid Masks
-    createOrganicZoneMask("mask-liquid", data.latBoil, data.latFreeze, 0, "liquid");
-    createOrganicZoneMask("mask-ice", data.latBoil, data.latFreeze, 0, "ice");
-    const lMaskId = `mask-liquid-final-${state.seed}`;
-    createCompositeMask(lMaskId, "mask-liquid", terraURL, state.waterLevel/100, true, 120);
-
-    const oceanGradId = `grad-ocean-${state.seed}`;
-    const oGrad = document.createElementNS("http://www.w3.org/2000/svg", "radialGradient");
-    oGrad.setAttribute("id", oceanGradId);
-    oGrad.setAttribute("cx", "50%"); oGrad.setAttribute("cy", "50%");
-    oGrad.classList.add('dynamic-def');
-    const baseLiq = data.liquid.color;
-    const deepLiq = artColor(baseLiq, -5, 5);
-    oGrad.innerHTML = `<stop offset="0%" stop-color="${deepLiq}"/><stop offset="30%" stop-color="${baseLiq}"/>`;
-    dom.defs.appendChild(oGrad);
-
-    const liquidRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    liquidRect.setAttribute("width","3000"); 
-    liquidRect.setAttribute("height","1000");
-    liquidRect.setAttribute("x", "-1000");
-    liquidRect.setAttribute("fill", `url(#${oceanGradId})`);
-    liquidRect.setAttribute("mask", `url(#${lMaskId})`);
-    if (data.liquid.type !== "magma") liquidRect.setAttribute("filter", "url(#liquid-blur)");
-    dom.gLiquid.appendChild(liquidRect);
-
-    const reflection = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-    reflection.setAttribute("cx","500"); reflection.setAttribute("cy","300");
-    reflection.setAttribute("rx","150"); reflection.setAttribute("ry","100");
-    reflection.setAttribute("fill", "white"); reflection.setAttribute("opacity", "0.3");
-    reflection.setAttribute("transform", "rotate(-45, 500, 300)");
-    reflection.setAttribute("filter", "url(#geo-blur)");
-    dom.gLiquid.appendChild(reflection);
-
-    // Ice Layer
-    const iceRect = document.createElementNS("http://www.w3.org/2000/svg", "image");
-    iceRect.setAttribute("width","3000"); 
-    iceRect.setAttribute("height","1000");
-    iceRect.setAttribute("x", "-1000");
-    iceRect.setAttribute("href", iceURL); // Uses baked texture
-    iceRect.setAttribute("mask", `url(#mask-ice)`);
-    dom.gIce.appendChild(iceRect);
-
-    // Biology
-    if (data.hasLife) {
-        const bioZoneMask = "mask-bio-zone";
-        createOrganicBandMask(bioZoneMask, data.maxT, data.minT, data.bioMinT, data.bioMaxT, 0);
-        const landMaskId = `mask-land-only-${state.seed}`;
-        createCompositeMask(landMaskId, null, terraURL, state.waterLevel/255, false); 
-        const gBio = document.createElementNS("http://www.w3.org/2000/svg", "g");
-        gBio.setAttribute("mask", `url(#${landMaskId})`);
-        
-        const bioRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        bioRect.setAttribute("width","3000"); 
-        bioRect.setAttribute("height","1000");
-        bioRect.setAttribute("x", "-1000");
-        bioRect.setAttribute("fill", data.bioColor);
-        bioRect.setAttribute("mask", `url(#${bioZoneMask})`);
-        bioRect.setAttribute("opacity", "0.7");
-        bioRect.style.mixBlendMode = "multiply"; 
-        gBio.appendChild(bioRect);
-        dom.gBio.appendChild(gBio);
-    }
-
-    // Clouds
-    if (cloudURL) {
-        const cloudImg = document.createElementNS("http://www.w3.org/2000/svg", "image");
-        cloudImg.setAttribute("width","3000"); 
-        cloudImg.setAttribute("height","1000");
-        cloudImg.setAttribute("x", "-1000");
-        cloudImg.setAttribute("href", cloudURL);
-        cloudImg.setAttribute("opacity", "0.6");
-        dom.gCloudsRotator.appendChild(cloudImg);
-    }
+    // Spread thresholds across 0.0 to 1.0 based on palette size
+    let stops = [0];
+    let current = 0;
+    const gap = 0.95 / (palette.length - 1);
     
-    // Atmos Glow
-    const gradAtmos = document.createElementNS("http://www.w3.org/2000/svg", "radialGradient");
-    gradAtmos.setAttribute("id", "grad-atmos");
-    gradAtmos.classList.add('dynamic-def');
-    gradAtmos.innerHTML = `
-        <stop offset="85%" stop-color="${data.cloudHex}" stop-opacity="0" />
-        <stop offset="95%" stop-color="${data.cloudHex}" stop-opacity="${data.atmosDensity * 0.4}" />
-        <stop offset="100%" stop-color="${data.cloudHex}" stop-opacity="${data.atmosDensity}" />
-    `;
-    dom.defs.appendChild(gradAtmos);
-    dom.rimLight.setAttribute('stroke', artColor(data.cloudHex, 20, -10, 0));
-
-    if (data.rings) generateRings(rng, data);
-
-    dom.btnGen.disabled = false;
-    dom.btnGen.innerText = "Update View";
-    softUpdate();
-}
-
-function createOrganicZoneMask(id, latBoil, latFreeze, tilt, type) {
-    const gradId = `grad-${id}-${state.seed}`;
-    const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
-    grad.setAttribute("id", gradId);
-    grad.setAttribute("x1", "0"); grad.setAttribute("y1", "0"); grad.setAttribute("x2", "0"); grad.setAttribute("y2", "1");
-    grad.setAttribute("gradientTransform", `rotate(${tilt}, 0.5, 0.5)`);
-    grad.classList.add('dynamic-def');
-
-    let stops = "";
-    const boilY_top = 0.5 - (latBoil * 0.5); 
-    const frzY_top  = 0.5 - (latFreeze * 0.5);
-    const boilY_bot = 0.5 + (latBoil * 0.5);
-    const frzY_bot  = 0.5 + (latFreeze * 0.5);
-    const spread = 0.02;
-
-	if (type === "liquid") {
-        stops = `<stop offset="0%" stop-color="white"/><stop offset="${(boilY_top-spread)*100}%" stop-color="white"/><stop offset="${(boilY_top+spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(boilY_bot-spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(boilY_bot+spread)*100}%" stop-color="white"/><stop offset="100%" stop-color="white"/>`;
-    } else if (type === "ice") {
-        stops = `<stop offset="0%" stop-color="white"/><stop offset="${(frzY_top-spread)*100}%" stop-color="white"/><stop offset="${(frzY_top+spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(frzY_bot-spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(frzY_bot+spread)*100}%" stop-color="white"/><stop offset="100%" stop-color="white"/>`;
-    }
-    grad.innerHTML = stops;
-    dom.defs.appendChild(grad);
-    const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
-    mask.setAttribute("id", id);
-    mask.classList.add('dynamic-def');
-    
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("width", "3000"); rect.setAttribute("height", "1000");
-    rect.setAttribute("x", "-1000");
-    rect.setAttribute("fill", `url(#${gradId})`);
-    rect.setAttribute("filter", "url(#zone-warp)"); // Zone warp is cheap enough on a gradient
-    mask.appendChild(rect);
-    dom.defs.appendChild(mask);
-}
-
-function createOrganicBandMask(id, maxT, minT, targetMin, targetMax, tilt) {
-    const getLat = (t) => (maxT - t) / (maxT - minT);
-    let lat1 = Math.max(0, Math.min(1, getLat(targetMax))); 
-    let lat2 = Math.max(0, Math.min(1, getLat(targetMin))); 
-    const y1_top = 0.5 - lat1 * 0.5; 
-    const y2_top = 0.5 - lat2 * 0.5;
-    const y1_bot = 0.5 + lat1 * 0.5; 
-    const y2_bot = 0.5 + lat2 * 0.5;
-    const gradId = `grad-${id}-${state.seed}`;
-    const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
-    grad.setAttribute("id", gradId);
-    grad.setAttribute("x1", "0"); grad.setAttribute("y1", "0"); grad.setAttribute("y2", "1");
-    grad.setAttribute("gradientTransform", `rotate(${tilt}, 0.5, 0.5)`);
-    grad.classList.add('dynamic-def');
-    const spread = 0.05; 
-    grad.innerHTML = `<stop offset="0%" stop-color="#c0c0c0"/><stop offset="${(y2_top-spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(y2_top+spread)*100}%" stop-color="white"/><stop offset="${(y1_top-spread)*100}%" stop-color="white"/><stop offset="${(y1_top+spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(y1_bot-spread)*100}%" stop-color="#c0c0c0"/><stop offset="${(y1_bot+spread)*100}%" stop-color="white"/><stop offset="${(y2_bot-spread)*100}%" stop-color="white"/><stop offset="${(y2_bot+spread)*100}%" stop-color="#c0c0c0"/><stop offset="100%" stop-color="#c0c0c0"/>`;
-    dom.defs.appendChild(grad);
-    const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
-    mask.setAttribute("id", id);
-    mask.classList.add('dynamic-def');
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("width", "3000"); rect.setAttribute("height", "1000");
-    rect.setAttribute("x", "-1000");
-    rect.setAttribute("fill", `url(#${gradId})`);
-    rect.setAttribute("filter", "url(#zone-warp)");
-    mask.appendChild(rect);
-    dom.defs.appendChild(mask);
-}
-
-function createCompositeMask(id, thermalMaskId, noiseURL, threshold, invert, slopeVal = 50) {
-    const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
-    mask.setAttribute("id", id);
-    mask.classList.add('dynamic-def');
-    const threshId = `thresh-${id}`;
-    const filter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
-    filter.setAttribute("id", threshId);
-    filter.setAttribute("color-interpolation-filters", "sRGB"); 
-    filter.classList.add('dynamic-def');
-    let slope = slopeVal, intercept = -(threshold * slope) + 0.5;
-    if (invert) { slope = -slopeVal; intercept = (threshold * slopeVal) + 0.5; }
-    filter.innerHTML = `<feComponentTransfer><feFuncR type="linear" slope="${slope}" intercept="${intercept}" /><feFuncG type="linear" slope="${slope}" intercept="${intercept}" /><feFuncB type="linear" slope="${slope}" intercept="${intercept}" /></feComponentTransfer>`;
-    dom.defs.appendChild(filter);
-    
-    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    // Use Baked Image
-    const r1 = document.createElementNS("http://www.w3.org/2000/svg", "image");
-    r1.setAttribute("width","3000"); 
-    r1.setAttribute("height","1000");
-    r1.setAttribute("x", "-1000");
-    r1.setAttribute("href", noiseURL);
-    r1.setAttribute("filter", `url(#${threshId})`);
-    g.appendChild(r1);
-    if (thermalMaskId) { r1.setAttribute("mask", `url(#${thermalMaskId})`); }
-    mask.appendChild(g);
-    dom.defs.appendChild(mask);
-}
-
-function generateSolidLayers(rng, data, palette, noiseURL) {
-    state.layerThresholds = []; 
-    let stops = [0], current = 0, gapBase = 0.05;
-    if (data.solid.type === 'crystal') gapBase = 0.03;
-    if (data.solid.roughness < 0.6) gapBase = 0.08;
-    const multiplier = 1.08; 
-    for(let i=1; i<palette.length; i++) { current += gapBase; stops.push(current); gapBase *= multiplier; }
-    const maxVal = stops[stops.length-1];
-    const normalizedStops = stops.map(v => 0.08 + (v / maxVal) * 0.75);
-
-    palette.forEach((color, i) => {
+    palette.slice(1).forEach((color, i) => {
+        const level = (i + 1) * gap;
         const maskID = `mask-layer-${i}-${state.seed}`;
         const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
         mask.setAttribute("id", maskID);
         mask.classList.add('dynamic-def');
-        const gMask = document.createElementNS("http://www.w3.org/2000/svg", "g");
         
-        // Use Baked Image
-        const rectNoise = document.createElementNS("http://www.w3.org/2000/svg", "image");
-        rectNoise.setAttribute("width", "3000"); 
-        rectNoise.setAttribute("height", "1000");
-        rectNoise.setAttribute("x", "-1000");
-        rectNoise.setAttribute("href", noiseURL); 
-        gMask.appendChild(rectNoise);
-
+        // Threshold Filter
         const threshID = `thresh-layer-${i}`;
         const threshFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
         threshFilter.setAttribute("id", threshID);
-        threshFilter.setAttribute("color-interpolation-filters", "sRGB"); // FORCE sRGB
         threshFilter.classList.add('dynamic-def');
-        const jitter = (rng() * 0.04) - 0.02;
-        const level = Math.max(0, Math.min(1, normalizedStops[i] + jitter));
-        state.layerThresholds.push(level); 
-        const slope = 60, intercept = -(level * slope);
+        
+        // Store for soft updates
+        state.layerThresholds.push(level);
+        
+        const slope = 80; // Hard edge
+        const intercept = -(level * slope);
         threshFilter.innerHTML = `<feComponentTransfer><feFuncR type="linear" slope="${slope}" intercept="${intercept}" /><feFuncG type="linear" slope="${slope}" intercept="${intercept}" /><feFuncB type="linear" slope="${slope}" intercept="${intercept}" /></feComponentTransfer>`;
         dom.defs.appendChild(threshFilter);
-        gMask.setAttribute("filter", `url(#${threshID})`);
-        mask.appendChild(gMask);
+
+        const noiseRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        noiseRect.setAttribute("width","2048"); noiseRect.setAttribute("height","1024");
+        noiseRect.setAttribute("fill", `url(#${noisePatternId})`);
+        noiseRect.setAttribute("filter", `url(#${threshID})`);
+        mask.appendChild(noiseRect);
         dom.defs.appendChild(mask);
-        
+
         const layerRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        layerRect.setAttribute("width", "3000"); 
-        layerRect.setAttribute("height", "1000");
-        layerRect.setAttribute("x", "-1000");
+        layerRect.setAttribute("width","2048"); layerRect.setAttribute("height","1024");
         layerRect.setAttribute("fill", color);
         layerRect.setAttribute("mask", `url(#${maskID})`);
-        dom.gTerrain.appendChild(layerRect);
+        dom.bTerrain.appendChild(layerRect);
     });
-}
 
-//function generateGeology(rng, data) {
-//    dom.gGeoStructure.innerHTML = '';
-//    const singleTile = document.createElementNS("http://www.w3.org/2000/svg", "g");
-//
-//    if (data.roughness > 0.5) {
-//        const count = Math.ceil(8 * data.roughness);
-//        for (let i = 0; i < count; i++) {
-//            const lat1 = rng()*2-1; 
-//            const lon1 = rng()*6.28;
-//            const lat2 = rng()*2-1; 
-//            const lon2 = lon1 + rng();
-//            let d = "";
-//            for(let t=0; t<=12; t++) {
-//                const step = t/12;
-//                const lat = lat1+(lat2-lat1)*step;
-//                const lon = lon1+(lon2-lon1)*step;
-//                const p = projectSphere(450, lat, lon, 0); 
-//                if(p.z > -100) d += (t===0?"M":"L") + ` ${p.x} ${p.y}`;
-//            }
-//            if(d) {
-//                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-//                path.setAttribute("d", d);
-//                path.setAttribute("fill", "none");
-//                path.setAttribute("stroke", "white");
-//                path.setAttribute("stroke-width", rng() * 30 + 10);
-//                path.setAttribute("filter", "url(#geo-blur)");
-//                path.setAttribute("opacity", 0.6 * data.roughness);
-//                singleTile.appendChild(path);
-//            }
-//        }
-//    }
-//
-//    const tileLeft = singleTile.cloneNode(true); 
-//    tileLeft.setAttribute("transform", "translate(-1000,0)");
-//    const tileRight = singleTile.cloneNode(true); 
-//    tileRight.setAttribute("transform", "translate(1000,0)");
-//    
-//    const wrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
-//    wrapper.appendChild(tileLeft);
-//    wrapper.appendChild(singleTile);
-//    wrapper.appendChild(tileRight);
-//    dom.gGeoStructure.appendChild(wrapper);
-//}
+    // 3. LIQUID / ICE MASKS
+    const lMaskId = `filter-mask-liq-${state.seed}`;
+    const lFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
+    lFilter.setAttribute("id", lMaskId);
+    lFilter.classList.add('dynamic-def');
+    lFilter.innerHTML = `<feComponentTransfer><feFuncR type="linear" slope="1" intercept="0" /><feFuncG type="linear" slope="1" intercept="0" /><feFuncB type="linear" slope="1" intercept="0" /></feComponentTransfer>`;
+    dom.defs.appendChild(lFilter);
 
-function generateCloudsSVG(rng, data) {
-    const R = 640; 
-    const generateCloudSpine = (yBase, width, xOffset) => {
-        const points = [];
-        const steps = 60;
-        const startX = -width / 2 + xOffset;
-        const stepSize = width / steps;
-        let yDrift = 0;
-        for (let i = 0; i <= steps; i++) {
-            const xRel = startX + (i * stepSize);
-            const xRatio = xRel / R;
-            const sphereCurve = (xRatio * xRatio) * yBase * -0.8; 
-            let y = yBase + sphereCurve;
-            yDrift += (rng() - 0.5) * 1.0;
-            yDrift *= 0.95;
-            y += yDrift;
-            points.push({ x: 500 + xRel, y: 500 + y });
-        }
-        return points;
-    };
+    const liqMask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
+    liqMask.setAttribute("id", `mask-liq-${state.seed}`);
+    liqMask.classList.add('dynamic-def');
+    const lmRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    lmRect.setAttribute("width","2048"); lmRect.setAttribute("height","1024");
+    lmRect.setAttribute("fill", `url(#${noisePatternId})`);
+    lmRect.setAttribute("filter", `url(#${lMaskId})`);
+    liqMask.appendChild(lmRect);
+    dom.defs.appendChild(liqMask);
 
-    const generateCloudShapeFromSpine = (spinePoints, options = {}) => {
-        const { baseThickness=30, thicknessVariance=10, edgeNoise=10, taperPower=0.5 } = options;
-        if (spinePoints.length < 3) return "";
-        const topPoints = [], botPoints = [];
-        let thickness = baseThickness;
-        for (let i = 0; i < spinePoints.length; i++) {
-            const p_curr = spinePoints[i];
-            const p_next = spinePoints[Math.min(spinePoints.length-1, i+1)];
-            const p_prev = spinePoints[Math.max(0, i-1)];
-            const dx = p_next.x - p_prev.x, dy = p_next.y - p_prev.y;
-            let nx = -dy, ny = dx;
-            const len = Math.sqrt(nx*nx+ny*ny);
-            if (len > 0) { nx /= len; ny /= len; }
-            const progress = i / (spinePoints.length - 1);
-            const taper = Math.sin(progress * Math.PI); 
-            const thickMod = Math.pow(taper, taperPower);
-            thickness += (rng() - 0.5) * (thicknessVariance / 5);
-            thickness = Math.max(5, thickness); 
-            const currentThick = thickness * thickMod;
-            const jag = (rng() - 0.5) * edgeNoise * thickMod;
-            topPoints.push({ x: p_curr.x + nx * (currentThick * 0.5 + jag), y: p_curr.y + ny * (currentThick * 0.5 + jag) });
-            botPoints.push({ x: p_curr.x - nx * (currentThick * 0.5 + jag), y: p_curr.y - ny * (currentThick * 0.5 + jag) });
-        }
-        let d = `M ${topPoints[0].x.toFixed(1)} ${topPoints[0].y.toFixed(1)}`;
-        for (let i = 1; i < topPoints.length; i++) d += ` L ${topPoints[i].x.toFixed(1)} ${topPoints[i].y.toFixed(1)}`;
-        for (let i = botPoints.length - 1; i >= 0; i--) d += ` L ${botPoints[i].x.toFixed(1)} ${botPoints[i].y.toFixed(1)}`;
-        d += " Z";
-        return d;
-    };
+    // Liquid Rect
+    const lRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    lRect.setAttribute("width","2048"); lRect.setAttribute("height","1024");
+    lRect.setAttribute("fill", data.liquid.color);
+    lRect.setAttribute("mask", `url(#mask-liq-${state.seed})`);
+    if(data.liquid.type !== "magma") lRect.setAttribute("filter", "url(#liquid-blur)");
+    dom.bLiquid.appendChild(lRect);
 
-    const generateCloudSystem = (driverSpine, baseColor, yBase) => {
-        const systemElements = [];
-        const stackingDirection = yBase < 0 ? -1 : 1; 
-        const createStack = (spine, layers, scale) => {
-            const elements = [];
-            for (let i = 0; i <= layers; i++) {
-                const lengthRatio = 1.0 - (i * 0.08); 
-                const subLength = Math.floor(spine.length * Math.max(0.4, lengthRatio));
-                const slack = spine.length - subLength;
-                const startIdx = Math.floor(rng() * (slack * 0.8) + (slack * 0.1));
-                const baseSubSpine = spine.slice(startIdx, startIdx + subLength);
-                const offsetDist = i * 14 * scale * stackingDirection; 
-                const disjointX = (rng() - 0.5) * 20 * scale; 
-                const offsetSubSpine = baseSubSpine.map((p, j, arr) => {
-                    const p_next = arr[Math.min(arr.length-1, j+1)];
-                    const p_prev = arr[Math.max(0, j-1)];
-                    const dx = p_next.x - p_prev.x, dy = p_next.y - p_prev.y;
-                    let nx = -dy, ny = dx;
-                    const len = Math.sqrt(nx*nx+ny*ny);
-                    if (len > 0) { nx /= len; ny /= len; }
-                    return { x: p.x + (nx * offsetDist) + disjointX, y: p.y + (ny * offsetDist) };
-                });
-                const subPathData = generateCloudShapeFromSpine(offsetSubSpine, {
-                    baseThickness: (35 - (i * 2)) * scale, edgeNoise: (12 + i) * scale, taperPower: 0.5
-                });
-                if (subPathData) {
-                    const el = `<path d="${subPathData}" fill="${artColor(baseColor, 40 - (i * 10), -5)}" fill-opacity="0.6"/>`;
-                    elements.push(el);
-                }
+    // Ice Zone Logic
+    const zoneGradId = `grad-zones-${state.seed}`;
+    const zoneGrad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
+    zoneGrad.setAttribute("id", zoneGradId);
+    zoneGrad.setAttribute("x1", "0"); zoneGrad.setAttribute("y1", "0"); zoneGrad.setAttribute("x2", "0"); zoneGrad.setAttribute("y2", "1"); 
+    zoneGrad.classList.add('dynamic-def');
+    const fTop = (0.5 - data.latFreeze*0.5)*100;
+    const fBot = (0.5 + data.latFreeze*0.5)*100;
+    zoneGrad.innerHTML = `<stop offset="0%" stop-color="#fff"/><stop offset="${fTop}%" stop-color="#fff"/><stop offset="${fTop}%" stop-color="#000"/><stop offset="${fBot}%" stop-color="#000"/><stop offset="${fBot}%" stop-color="#fff"/><stop offset="100%" stop-color="#fff"/>`;
+    dom.defs.appendChild(zoneGrad);
+
+    // Ice Mask (Combine Liquid Mask + Zone Mask)
+    // Simplified: Just draw ice over liquid using a mask wrapper
+    const iceZoneMaskId = `mask-ice-zone-${state.seed}`;
+    const izMask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
+    izMask.setAttribute("id", iceZoneMaskId);
+    izMask.classList.add('dynamic-def');
+    izMask.innerHTML = `<rect width="2048" height="1024" fill="url(#${zoneGradId})" filter="url(#zone-warp)"/>`;
+    dom.defs.appendChild(izMask);
+    
+    const iGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    iGroup.setAttribute("mask", `url(#${iceZoneMaskId})`);
+    const iRect = lRect.cloneNode(); 
+    iRect.setAttribute("fill", data.liquid.frozenColor);
+    iRect.setAttribute("filter", ""); 
+    iGroup.appendChild(iRect);
+    dom.bIce.appendChild(iGroup);
+
+    // 4. CLOUDS (Procedural Bands)
+    if (state.cloudsEnabled && data.atmosDensity > 0.05) {
+        const cloudSVG = generateCloudsSVG(rng, data);
+        dom.bClouds.innerHTML = cloudSVG;
+        
+        // Add color filter to group
+        // Not straightforward in simple SVG string concat, so we baked col into paths
+    }
+
+    // 5. RINGS (Canvas Particle System)
+    if (data.rings) {
+        const c = document.createElement('canvas');
+        c.width = 2048; c.height = 2048;
+        const ctx = c.getContext('2d');
+        const cx = 1024, cy = 1024;
+        
+        const bands = Math.floor(rng() * 5) + 3;
+        const solidColor = data.solid.color;
+        const iceColor = data.liquid.frozenColor;
+        
+        for(let b=0; b<bands; b++) {
+            const rStart = 400 + (rng() * 500);
+            const rEnd = rStart + (rng() * 150) + 20;
+            const density = rng();
+            const col = rng() > 0.5 ? solidColor : iceColor;
+            
+            // Draw thousands of "particles" (dots/arcs)
+            const particles = 2000 * density;
+            ctx.strokeStyle = col;
+            ctx.fillStyle = col;
+            
+            for(let p=0; p<particles; p++) {
+                const r = rStart + Math.random() * (rEnd - rStart);
+                const theta = Math.random() * Math.PI * 2;
+                const size = Math.random() * 2 + 0.5;
+                const alpha = Math.random() * 0.5 + 0.1;
+                
+                ctx.globalAlpha = alpha;
+                ctx.beginPath();
+                ctx.arc(cx + Math.cos(theta)*r, cy + Math.sin(theta)*r, size, 0, Math.PI*2);
+                ctx.fill();
             }
-            return elements;
-        };
-        const mainLayers = Math.floor(rng() * 4) + 4; 
-        systemElements.push(...createStack(driverSpine, mainLayers, 1.0));
-        return systemElements;
-    };
+            
+            // Add faint dust background for band
+            ctx.globalAlpha = 0.05;
+            ctx.beginPath();
+            ctx.arc(cx, cy, rEnd, 0, Math.PI*2);
+            ctx.arc(cx, cy, rStart, 0, Math.PI*2, true); // Hole
+            ctx.fill();
+        }
 
-    let allPaths = "";
-    
-    // Create tiles logic purely in string
-    const clusterCount = Math.floor(rng() * 2) + 3;
-    const range = 1.85; 
-    const zoneSize = range / clusterCount;
-    
-    let tileInner = "";
-    for (let i = 0; i < clusterCount; i++) {
-        const zoneTop = -(range/2) + (i * zoneSize);
-        const latPos = zoneTop + (rng() * zoneSize * 0.8) + (zoneSize * 0.1);
-        const yBase = latPos * R;
-        const maxChord = Math.sqrt(Math.max(0, R*R - yBase*yBase)) * 2;
-        const width = maxChord * (0.2 + rng() * 0.7);
-        const maxOffset = (maxChord - width) / 2;
-        const xOffset = (rng() * maxOffset * 2) - maxOffset;
-        const dist = Math.abs(latPos);
-        const col = artColor(data.cloudHex, dist * -15, dist * -5);
-        const spine = generateCloudSpine(yBase, width, xOffset);
-        const els = generateCloudSystem(spine, col, yBase);
-        tileInner += els.join('');
+        const ringTex = new THREE.CanvasTexture(c);
+        ringTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        ringMesh.material.map = ringTex;
+        ringMesh.material.needsUpdate = true;
+        ringMesh.visible = true;
+    } else {
+        ringMesh.visible = false;
     }
 
-    allPaths += `<g transform="translate(-1000,0)">${tileInner}</g>`;
-    allPaths += `<g>${tileInner}</g>`;
-    allPaths += `<g transform="translate(1000,0)">${tileInner}</g>`;
+    // UPDATE THREE.JS TEXTURES
+    softUpdate(true); // Sets thresholds based on water level
     
-    return allPaths;
-}
-
-function generateRings(rng, data) {
-    dom.gRingsBack.innerHTML = '';
-    dom.gRingsFront.innerHTML = '';
-    const tilt = data.tilt; 
-    if (rng() > 0.2) {
-        const ringBase = data.solid.color;
-        for(let i=0; i<8; i++) {
-            const r = 600 + i * 20; 
-            const ry = r * 0.25;
-            const arc = (s,e) => {
-                const rad=Math.PI/180;
-                const sx=500+r*Math.cos(e*rad), sy=500+ry*Math.sin(e*rad);
-                const ex=500+r*Math.cos(s*rad), ey=500+ry*Math.sin(s*rad);
-                return `M ${sx} ${sy} A ${r} ${ry} 0 0 0 ${ex} ${ey}`;
-            };
-            const width = rng()*8+2; 
-            const opacity = rng() * 0.3 + 0.1;
-            const color = artColor(ringBase, (i%2===0?20:-20), -10, 0);
-            const back = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            back.setAttribute("d", arc(180, 360));
-            back.setAttribute("stroke", color); 
-            back.setAttribute("fill", "none");
-            back.setAttribute("stroke-width", width); 
-            back.setAttribute("opacity", opacity);
-            back.setAttribute("transform", `rotate(${tilt}, 500, 500)`);
-            dom.gRingsBack.appendChild(back);
-            const front = back.cloneNode();
-            front.setAttribute("d", arc(0, 180));
-            dom.gRingsFront.appendChild(front);
-        }
-        return;
+    // Bake Surface
+    const surfaceTex = await bakeSVGToTexture(dom.svgSurface);
+    material.map = surfaceTex;
+    material.needsUpdate = true;
+    
+    // Bake Clouds
+    if (state.cloudsEnabled) {
+        const cloudTex = await bakeSVGToTexture(dom.svgClouds);
+        cloudMesh.material.map = cloudTex;
+        cloudMesh.visible = true;
+    } else {
+        cloudMesh.visible = false;
     }
-    const solidColor = data.solid.color; 
-    const iceColor = data.liquid.frozenColor || "#e0f2fe";
-    const palette = [solidColor, iceColor, artColor(solidColor, 15, -10), artColor(iceColor, -15, 5)];
-    const perspective = 0.25 + rng() * 0.15; 
-    const bands = [
-        { name: "B-Ring", start: 540, end: 650, density: 0.8, particles: 200 },
-        { name: "A-Ring", start: 670, end: 800, density: 0.5, particles: 200 },
-        { name: "F-Ring", start: 810, end: 825, density: 0.3, particles: 30 }
-    ];
-    const createArcPath = (radius, ry, startAngle, endAngle) => {
-        const rad = Math.PI / 180;
-        const sx = 500 + radius * Math.cos(endAngle * rad); 
-        const sy = 500 + ry * Math.sin(endAngle * rad);
-        const ex = 500 + radius * Math.cos(startAngle * rad); 
-        const ey = 500 + ry * Math.sin(startAngle * rad);
-        return `M ${sx} ${sy} A ${radius} ${ry} 0 0 0 ${ex} ${ey}`;
-    };
-    bands.forEach(band => {
-        for (let i = 0; i < band.particles; i++) {
-            const progress = rng();
-            const radius = band.start + progress * (band.end - band.start);
-            const ry = radius * perspective;
-            const wave = Math.sin(progress * Math.PI * (10 + rng() * 10));
-            const finalOpacity = (band.density * 0.3) * (0.5 + rng() * 0.5) + wave * 0.1;
-            if (finalOpacity < 0.04) continue;
-            const color = palette[Math.floor(rng() * palette.length)];
-            const width = 1 + rng() * 3.5;
-            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            path.setAttribute("stroke", color); 
-            path.setAttribute("fill", "none");
-            path.setAttribute("stroke-width", width); 
-            path.setAttribute("stroke-opacity", finalOpacity);
-            path.setAttribute("transform", `rotate(${tilt}, 500, 500)`);
-            const backPath = path.cloneNode(); 
-            backPath.setAttribute("d", createArcPath(radius, ry, 180, 360));
-            dom.gRingsBack.appendChild(backPath);
-            const frontPath = path.cloneNode(); 
-            frontPath.setAttribute("d", createArcPath(radius, ry, 0, 180));
-            dom.gRingsFront.appendChild(frontPath);
-        }
-    });
+    cloudMesh.material.needsUpdate = true;
+
+    // Remove Tilt
+    planetMesh.rotation.z = 0;
+    cloudMesh.rotation.z = 0;
+    ringMesh.rotation.x = -Math.PI / 2;
+
+    dom.btnGen.disabled = false;
+    dom.btnGen.innerText = "Re-Generate";
 }
 
-function projectSphere(r, lat, lon, tilt) {
-    let x = r * Math.cos(lat) * Math.sin(lon);
-    let y = r * Math.sin(lat);
-    let z = r * Math.cos(lat) * Math.cos(lon);
-    let rad = tilt * (Math.PI/180);
-    let xT = x * Math.cos(rad) - y * Math.sin(rad);
-    let yT = x * Math.sin(rad) + y * Math.cos(rad);
-    return { x: xT + 500, y: -yT + 500, z: z };
-}
-
-function softUpdate() {
-    const shadowOp = state.shadow / 100;
-    dom.terminator.setAttribute('opacity', shadowOp);
-    dom.terminator.setAttribute('d', 'M 500,50 A 450,450 0 1,1 500,950 A 550,450 0 1,0 500,50');
-    
-    const old = dom.defs.querySelector('#shadow-grad');
-    if(old) old.remove();
-    const grad = document.createElementNS("http://www.w3.org/2000/svg", "radialGradient");
-    grad.setAttribute("id", "shadow-grad");
-    grad.setAttribute("cx", "35%"); 
-    grad.setAttribute("cy", "35%");
-    grad.innerHTML = `<stop offset="50%" stop-color="#050508" stop-opacity="0"/><stop offset="100%" stop-color="#050508" stop-opacity="${shadowOp}"/>`;
-    dom.defs.appendChild(grad);
-
-    dom.gCloudsRotator.style.display = (state.cloudsEnabled) ? 'block' : 'none';
-
+function softUpdate(isGenerating = false) {
     const waterFactor = state.waterLevel / 100;
-    const updateFilterIntercept = (id, val) => {
-        const filter = document.getElementById(id);
-        if(!filter) return;
-        const funcs = filter.querySelectorAll('feFuncR, feFuncG, feFuncB');
-        funcs.forEach(f => f.setAttribute('intercept', val));
+    
+    // Update SVG Thresholds
+    const updateFilter = (id, slope, intercept) => {
+        const f = document.getElementById(id);
+        if(!f) return;
+        const funcs = f.querySelectorAll('feFuncR, feFuncG, feFuncB');
+        funcs.forEach(el => {
+            el.setAttribute('slope', slope);
+            el.setAttribute('intercept', intercept);
+        });
     };
-    if (state.layerThresholds && state.layerThresholds.length) {
-        state.layerThresholds.forEach((baseLevel, i) => {
-            const offset = (waterFactor - 0.5) * 1.5; 
-            const target = baseLevel + offset;
-            updateFilterIntercept(`thresh-layer-${i}`, -(target * 60));
+
+    // Update Terrain Layers
+    // We shift the thresholds slightly based on water level to simulate rising sea "covering" land
+    if(state.layerThresholds.length > 0) {
+         state.layerThresholds.forEach((base, i) => {
+             // If water rises, land thresholds effectively shift
+             const slope = 80;
+             const intercept = -(base * slope);
+             updateFilter(`thresh-layer-${i}`, slope, intercept);
+         });
+    }
+
+    // Update Liquid Mask
+    const lMaskId = `filter-mask-liq-${state.seed}`;
+    // Liquid noise is 0..1. High water factor means we accept more noise values.
+    // Standard inversion logic:
+    const slope = -50;
+    const intercept = (waterFactor * 50) + 0.5; 
+    updateFilter(lMaskId, slope, intercept);
+
+    // Update Lighting from Shadow Slider
+    const sunIntensity = (100 - state.shadow) / 50 * 2.0;
+    const ambientIntensity = (state.shadow) / 100 * 0.4; // More ambient in "shadowy" settings
+    sunLight.intensity = Math.max(0.1, sunIntensity);
+    ambientLight.intensity = Math.max(0.02, ambientIntensity);
+    
+    // Clouds Visibility
+    cloudMesh.visible = state.cloudsEnabled;
+
+    if (!isGenerating) {
+        // If simply sliding slider, re-bake surface
+        bakeSVGToTexture(dom.svgSurface).then(tex => {
+            if(material.map) material.map.dispose();
+            material.map = tex;
+            material.needsUpdate = true;
         });
     }
-    const slope = 120;
-    const lMaskThreshId = `thresh-mask-liquid-final-${state.seed}`;
-    updateFilterIntercept(lMaskThreshId, (waterFactor * slope) + 0.5);
-    const landMaskThreshId = `thresh-mask-land-only-${state.seed}`;
-    updateFilterIntercept(landMaskThreshId, -(waterFactor * 50) + 0.5);
-
-    // --- ROTATION UPDATE ---
-    const rot = state.rotation;
-    const translate = -((rot / 360) * 1000) % 1000;
-    
-    if (dom.gSurfaceSlider) {
-        dom.gSurfaceSlider.setAttribute("transform", `translate(${translate}, 0)`);
-    }
-
-    const cloudWrap = document.getElementById('cloud-wrapper');
-    if (cloudWrap) {
-        cloudWrap.setAttribute("transform", `translate(${translate}, 0)`);
-    }
 }
 
+/* --- INTERACTION (DRAG & SPIN) --- */
+function initInteraction() {
+    const stage = document.getElementById('stage');
+    
+    const handleStart = (x) => {
+        state.isDragging = true;
+        state.lastX = x;
+        state.velocity = 0;
+        state.autoRotate = false;
+        dom.chkAutoRotate.checked = false;
+    };
+
+    const handleMove = (x) => {
+        if (!state.isDragging) return;
+        const delta = x - state.lastX;
+        state.lastX = x;
+        state.velocity = delta * 0.005; // Sensitivity
+        planetGroup.rotation.y += state.velocity;
+    };
+
+    const handleEnd = () => {
+        state.isDragging = false;
+    };
+
+    // Mouse
+    stage.addEventListener('mousedown', e => handleStart(e.clientX));
+    window.addEventListener('mousemove', e => handleMove(e.clientX));
+    window.addEventListener('mouseup', handleEnd);
+
+    // Touch
+    stage.addEventListener('touchstart', e => handleStart(e.touches[0].clientX));
+    window.addEventListener('touchmove', e => handleMove(e.touches[0].clientX));
+    window.addEventListener('touchend', handleEnd);
+}
+
+/* --- ANIMATION LOOP --- */
+function animate() {
+    requestAnimationFrame(animate);
+
+    if (!state.isDragging) {
+        if (state.autoRotate) {
+            state.velocity = 0.001; // Slower, majestic rotation
+        } else {
+            state.velocity *= 0.95;
+            if (Math.abs(state.velocity) < 0.0001) state.velocity = 0;
+        }
+        planetGroup.rotation.y += state.velocity;
+        
+        // Cloud Parallax (Local Rotation)
+        cloudMesh.rotation.y += 0.0003; 
+        
+        // Ring Spin (Local)
+        if(ringMesh.visible) ringMesh.rotation.z -= 0.0005; 
+    }
+
+    renderer.render(scene, camera);
+}
+
+/* --- INITIALIZATION --- */
 window.onload = () => {
+    // Stars
     const bg = document.getElementById('starfield');
-    for(let i=0; i<80; i++) {
+    for(let i=0; i<150; i++) { // More stars
         const s = document.createElement('div');
         s.className = 'star';
-        s.style.top = Math.random()*100+'%'; 
-        s.style.left = Math.random()*100+'%';
-        s.style.width = Math.random()*2+'px'; 
-        s.style.height = s.style.width;
+        s.style.top = Math.random()*100+'%'; s.style.left = Math.random()*100+'%';
+        const size = Math.random() > 0.9 ? 2.5 : 1.5;
+        s.style.width = size+'px'; s.style.height = size+'px';
         s.style.animationDelay = Math.random()*5+'s';
         bg.appendChild(s);
     }
 
+    // Handlers
     const triggerRebuild = () => {
         state.seed = dom.seedInput.value.toUpperCase();
         state.waterLevel = parseInt(dom.rngWater.value);
-        state.rotation = parseInt(dom.rngRotation.value);
         state.shadow = parseInt(dom.rngShadow.value);
         state.cloudsEnabled = dom.chkClouds.checked;
+        state.autoRotate = dom.chkAutoRotate.checked;
         fullRebuild();
     }
 
-    const handleManualUpdate = () => {
-        state.waterLevel = parseInt(dom.rngWater.value);
-        state.shadow = parseInt(dom.rngShadow.value);
-        state.cloudsEnabled = dom.chkClouds.checked;
-        dom.lblWater.innerText = state.waterLevel + '%';
-        dom.lblShadow.innerText = state.shadow + '%';
-        softUpdate();
-    };
-
-    const handleRotation = () => {
-        state.rotation = parseInt(dom.rngRotation.value);
-        dom.lblRotation.innerText = state.rotation + '°';
-        softUpdate();
-    }
-
     dom.btnRnd.addEventListener('click', () => {
-        const pfx = ["TERRA", "AQUA", "MAGMA", "CRYO", "XENO", "LUNA", "SOL", "VEGA", "NOVA", "ATLAS", "ION", "KRYPTON"];
+        const pfx = ["TERRA", "AQUA", "MAGMA", "CRYO", "XENO", "LUNA", "SOL"];
         dom.seedInput.value = `${pfx[Math.floor(Math.random()*pfx.length)]}-${Math.floor(Math.random()*9999)}`;
         const tmpRng = createRNG(dom.seedInput.value);
         const tmpData = generatePlanetData(tmpRng);
@@ -1554,28 +1263,43 @@ window.onload = () => {
 
     dom.btnGen.addEventListener('click', triggerRebuild);
     dom.seedInput.addEventListener('change', triggerRebuild);
-    dom.rngWater.addEventListener('input', handleManualUpdate);
-    dom.rngShadow.addEventListener('input', () => { state.shadow = parseInt(dom.rngShadow.value); softUpdate(); });
-    dom.chkClouds.addEventListener('change', () => { state.cloudsEnabled = dom.chkClouds.checked; softUpdate(); });
-    dom.rngRotation.addEventListener('input', handleRotation);
+    dom.rngWater.addEventListener('change', () => { 
+        state.waterLevel = parseInt(dom.rngWater.value);
+        dom.lblWater.innerText = state.waterLevel + '%';
+        softUpdate();
+    });
+    dom.rngWater.addEventListener('input', () => dom.lblWater.innerText = dom.rngWater.value + '%');
 
-    dom.btnDownload.addEventListener('click', () => {
-        const svgData = dom.svg.outerHTML;
-        const blob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `FORGE_V10.3_${state.seed}.svg`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    dom.rngShadow.addEventListener('input', () => {
+        state.shadow = parseInt(dom.rngShadow.value);
+        dom.lblShadow.innerText = state.shadow + '%';
+        softUpdate();
     });
 
+    dom.chkClouds.addEventListener('change', () => {
+        state.cloudsEnabled = dom.chkClouds.checked;
+        softUpdate();
+    });
+    
+    dom.chkAutoRotate.addEventListener('change', () => {
+        state.autoRotate = dom.chkAutoRotate.checked;
+    });
+
+    dom.btnDownload.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = `PLANETMAP_${state.seed}.png`;
+        link.href = material.map.image.src;
+        link.click();
+    });
+
+    // Init
+    initInteraction();
     const initRng = createRNG(dom.seedInput.value);
     const initData = generatePlanetData(initRng);
     dom.rngWater.value = initData.suggestedWater;
     dom.lblWater.innerText = initData.suggestedWater + '%';
     triggerRebuild();
+    animate();
 };
 </script>
 </body>

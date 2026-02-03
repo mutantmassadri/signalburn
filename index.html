@@ -407,21 +407,21 @@ const SOLIDS = [
     { name: "Basalt",     color: "#3f3f46", tag: "Si", roughness: 1.0, type: "rock", melt: 1100 },
     { name: "Granite",    color: "#a1a1aa", tag: "Si", roughness: 1.3, type: "rock", melt: 1215 },
     { name: "Sandstone",  color: "#f59e0b", tag: "Si", roughness: 0.5, type: "rock", melt: 1300 },
-    { name: "Limestone",  color: "#e5e5e5", tag: "C",  roughness: 0.8, type: "rock", melt: 900 },
+    { name: "Limestone",  color: "#a8a29e", tag: "C",  roughness: 0.8, type: "rock", melt: 900 },
     { name: "Obsidian",   color: "#18181b", tag: "Si", roughness: 1.1, type: "glass", melt: 1000 },
-    { name: "Pumice",     color: "#d4d4d8", tag: "Si", roughness: 1.5, type: "rock", melt: 1200 },
+    { name: "Gabbro",     color: "#52525b", tag: "Si", roughness: 1.1, type: "rock", melt: 1200 },
     { name: "Regolith",   color: "#737373", tag: "Si", roughness: 1.4, type: "dust", melt: 1200 },
     { name: "Slate",      color: "#475569", tag: "Si", roughness: 0.9, type: "rock", melt: 1200 },
-    { name: "Marble",     color: "#f3f4f6", tag: "C",  roughness: 0.7, type: "rock", melt: 1200 },
-    { name: "Water Ice",  color: "#e2e8f0", tag: "C",  roughness: 0.7, type: "ice", melt: 0 },
-    { name: "Dry Ice",    color: "#eff6ff", tag: "C",  roughness: 0.4, type: "ice", melt: -78 },
+    { name: "Marble",     color: "#cbd5e1", tag: "C",  roughness: 0.7, type: "rock", melt: 1200 },
+    { name: "Water Ice",  color: "#bfdbfe", tag: "C",  roughness: 0.7, type: "ice", melt: 0 },
+    { name: "Dry Ice",    color: "#c7d2fe", tag: "C",  roughness: 0.4, type: "ice", melt: -78 },
     { name: "Blue Ice",   color: "#bfdbfe", tag: "C",  roughness: 0.9, type: "ice", melt: 0 },
     { name: "Methane Ice",color: "#7dd3fc", tag: "C",  roughness: 0.5, type: "ice", melt: -182 },
     { name: "Iron Ore",   color: "#b91c1c", tag: "Fe", roughness: 1.2, type: "metal", melt: 1538 },
     { name: "Gold Vein",  color: "#facc15", tag: "Fe", roughness: 1.0, type: "metal", melt: 1064 },
     { name: "Copper Ox",  color: "#34d399", tag: "Fe", roughness: 0.8, type: "metal", melt: 1085 },
     { name: "Titanium",   color: "#94a3b8", tag: "Fe", roughness: 0.9, type: "metal", melt: 1668 },
-    { name: "Bone",       color: "#fef3c7", tag: "Bio", roughness: 0.9, type: "organic", melt: 200 }
+    { name: "Bone",       color: "#d6d3d1", tag: "Bio", roughness: 0.9, type: "organic", melt: 200 }
 ];
 
 function hexToHSL(hex) {
@@ -456,10 +456,25 @@ function hslToHex(h, s, l) {
 
 function artColor(hex, lShift, sShift = 0, hShift = 0) {
     const hsl = hexToHSL(hex);
-    let newL = Math.max(6, Math.min(95, hsl.l + lShift));
+    
+    // Calculate initial target lightness
+    let targetL = hsl.l + lShift;
+    
+    // DIMINISHING RETURNS FOR HIGHLIGHTS
+    // If we are pushing brightness high (over 85%), we apply a soft compression curve
+    // so we never quite hit 100% white. This preserves detail in the highest peaks.
+    if (lShift > 0 && targetL > 85) {
+        const excess = targetL - 85;
+        // Asymptotic compression: maps 0->Infinity to 0->12
+        // This ensures the max value is 85 + 12 = 97.
+        targetL = 85 + (excess / (excess + 15)) * 12;
+    }
+    
+    let newL = Math.max(5, Math.min(98, targetL));
     let newS = Math.max(0, Math.min(100, hsl.s + sShift));
     let newH = (hsl.h + hShift) % 360;
     if (newH < 0) newH += 360;
+    
     return hslToHex(newH, newS, newL);
 }
 
@@ -602,7 +617,7 @@ function generatePlanetData(rng) {
     let solidName = solid.name;
     if (baseK > solidMeltK * 3) {
         solidName = `Molten ${solid.name}`;
-        solid = { ...solid, color: artColor(solid.color, 25, 15, 5) };
+        solid = { ...solid, color: artColor(solid.color, 8, 5, 5) };
     }
     const potentialLiquids = LIQUIDS.filter(l => baseTemp > l.freeze);
     let liquid, oceanName, liquidState = "none", cloudColor, atmosContribution = 0;
@@ -675,8 +690,19 @@ function generatePlanetData(rng) {
 function generatePalette(data) {
     const s = data.solid.color;
     return [
-        artColor(s, -45, 10, -15), artColor(s, -30, 5, -10), artColor(s, -15, 0, -5), s,
-        artColor(s, 15, 0, 5), artColor(s, 30, -10, 10), artColor(s, 50, -20, 15)
+        // Deep shadows and lowlands
+        artColor(s, -40, 10, -15), 
+        artColor(s, -25, 5, -10), 
+        artColor(s, -15, 0, -5), 
+        // Base color
+        s,
+        // Brighter as we move inland
+		artColor(s, 4, 0, 1), 
+        artColor(s, 8, -3, 3), 
+        artColor(s, 10, -4, 3), 
+        artColor(s, 13, -5, 4), 
+        artColor(s, 18, -8, 6), 
+        artColor(s, 25, -13, 10)
     ];
 }
 
@@ -800,7 +826,7 @@ async function fullRebuild() {
     // --- ASSEMBLE SCENE ---
 
     // Geology (Vector - Fast enough to keep live)
-    generateGeology(rng, data);
+//    generateGeology(rng, data);
 
     // Solid Terrain Layers
     generateSolidLayers(rng, data, palette, terraURL);
@@ -1040,49 +1066,49 @@ function generateSolidLayers(rng, data, palette, noiseURL) {
     });
 }
 
-function generateGeology(rng, data) {
-    dom.gGeoStructure.innerHTML = '';
-    const singleTile = document.createElementNS("http://www.w3.org/2000/svg", "g");
-
-    if (data.roughness > 0.5) {
-        const count = Math.ceil(8 * data.roughness);
-        for (let i = 0; i < count; i++) {
-            const lat1 = rng()*2-1; 
-            const lon1 = rng()*6.28;
-            const lat2 = rng()*2-1; 
-            const lon2 = lon1 + rng();
-            let d = "";
-            for(let t=0; t<=12; t++) {
-                const step = t/12;
-                const lat = lat1+(lat2-lat1)*step;
-                const lon = lon1+(lon2-lon1)*step;
-                const p = projectSphere(450, lat, lon, 0); 
-                if(p.z > -100) d += (t===0?"M":"L") + ` ${p.x} ${p.y}`;
-            }
-            if(d) {
-                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                path.setAttribute("d", d);
-                path.setAttribute("fill", "none");
-                path.setAttribute("stroke", "white");
-                path.setAttribute("stroke-width", rng() * 30 + 10);
-                path.setAttribute("filter", "url(#geo-blur)");
-                path.setAttribute("opacity", 0.6 * data.roughness);
-                singleTile.appendChild(path);
-            }
-        }
-    }
-
-    const tileLeft = singleTile.cloneNode(true); 
-    tileLeft.setAttribute("transform", "translate(-1000,0)");
-    const tileRight = singleTile.cloneNode(true); 
-    tileRight.setAttribute("transform", "translate(1000,0)");
-    
-    const wrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    wrapper.appendChild(tileLeft);
-    wrapper.appendChild(singleTile);
-    wrapper.appendChild(tileRight);
-    dom.gGeoStructure.appendChild(wrapper);
-}
+//function generateGeology(rng, data) {
+//    dom.gGeoStructure.innerHTML = '';
+//    const singleTile = document.createElementNS("http://www.w3.org/2000/svg", "g");
+//
+//    if (data.roughness > 0.5) {
+//        const count = Math.ceil(8 * data.roughness);
+//        for (let i = 0; i < count; i++) {
+//            const lat1 = rng()*2-1; 
+//            const lon1 = rng()*6.28;
+//            const lat2 = rng()*2-1; 
+//            const lon2 = lon1 + rng();
+//            let d = "";
+//            for(let t=0; t<=12; t++) {
+//                const step = t/12;
+//                const lat = lat1+(lat2-lat1)*step;
+//                const lon = lon1+(lon2-lon1)*step;
+//                const p = projectSphere(450, lat, lon, 0); 
+//                if(p.z > -100) d += (t===0?"M":"L") + ` ${p.x} ${p.y}`;
+//            }
+//            if(d) {
+//                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+//                path.setAttribute("d", d);
+//                path.setAttribute("fill", "none");
+//                path.setAttribute("stroke", "white");
+//                path.setAttribute("stroke-width", rng() * 30 + 10);
+//                path.setAttribute("filter", "url(#geo-blur)");
+//                path.setAttribute("opacity", 0.6 * data.roughness);
+//                singleTile.appendChild(path);
+//            }
+//        }
+//    }
+//
+//    const tileLeft = singleTile.cloneNode(true); 
+//    tileLeft.setAttribute("transform", "translate(-1000,0)");
+//    const tileRight = singleTile.cloneNode(true); 
+//    tileRight.setAttribute("transform", "translate(1000,0)");
+//    
+//    const wrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
+//    wrapper.appendChild(tileLeft);
+//    wrapper.appendChild(singleTile);
+//    wrapper.appendChild(tileRight);
+//    dom.gGeoStructure.appendChild(wrapper);
+//}
 
 function generateCloudsSVG(rng, data) {
     const R = 640; 

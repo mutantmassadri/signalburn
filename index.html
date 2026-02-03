@@ -137,11 +137,11 @@
         .data-val { color: var(--c-text); font-weight: bold; text-align: right;}
         
         .tag { font-size: 0.7em; padding: 2px 4px; border-radius: 3px; margin-left: 5px; opacity: 0.9; }
-        .tag-c { background: #064e3b; color: #6ee7b7; border: 1px solid #059669; }
-        .tag-si { background: #312e81; color: #a5b4fc; border: 1px solid #4f46e5; }
-        .tag-fe { background: #451a03; color: #fdba74; border: 1px solid #c2410c; }
-        .tag-x { background: #4c1d95; color: #e9d5ff; border: 1px solid #8b5cf6; }
-        .tag-bio { background: #831843; color: #f9a8d4; border: 1px solid #db2777; }
+        .tag-c { background: #064e3b; color: #6ee7b7; border: 1px solid #059669; } /* Carbon/Life */
+        .tag-si { background: #312e81; color: #a5b4fc; border: 1px solid #4f46e5; } /* Gases/Water */
+        .tag-fe { background: #451a03; color: #fdba74; border: 1px solid #c2410c; } /* Metals/Rock */
+        .tag-x { background: #4c1d95; color: #e9d5ff; border: 1px solid #8b5cf6; } /* Exotic */
+        .tag-bio { background: #831843; color: #f9a8d4; border: 1px solid #db2777; } /* Biological */
         .tag-none { background: #27272a; color: #a1a1aa; border: 1px solid #3f3f46; }
 
         .tag-life { color: #10b981; text-shadow: 0 0 10px rgba(16,185,129,0.3); font-weight: bold; }
@@ -382,84 +382,147 @@
  */
 
 const LIQUIDS = [
-    // STANDARD (Blues/Teals)
-    { name: "Water",       color: "#3b82f6", freeze: 0,    boil: 100,  tag: "C",  cloud: "#ffffff", frozenColor: "#e0f2fe", type: "standard", gas: "Water Vapor" },
-    { name: "Salt Water",  color: "#1d4ed8", freeze: -2,   boil: 102,  tag: "C",  cloud: "#f1f5f9", frozenColor: "#bfdbfe", type: "standard", gas: "Water Vapor" },
-    { name: "Heavy Water", color: "#60a5fa", freeze: 3.8,  boil: 101,  tag: "C",  cloud: "#e0f2fe", frozenColor: "#93c5fd", type: "standard", gas: "Deuterium" },
-    { name: "Peroxide",    color: "#cbd5e1", freeze: -0.4, boil: 150,  tag: "O",  cloud: "#e0f2fe", frozenColor: "#e0f2fe", type: "standard", gas: "Oxygen" },
-    { name: "Brine",       color: "#0891b2", freeze: -21,  boil: 108,  tag: "C",  cloud: "#f0f9ff", frozenColor: "#bae6fd", type: "standard", gas: "Chlorine" },
-    
-    // VOLATILE (Cyans/Purples)
-    { name: "Methane",     color: "#06b6d4", freeze: -182, boil: -161, tag: "C",  cloud: "#bae6fd", frozenColor: "#bae6fd", type: "volatile", gas: "Methane" },
-    { name: "Ethane",      color: "#67e8f9", freeze: -183, boil: -88,  tag: "C",  cloud: "#e0f2fe", frozenColor: "#7dd3fc", type: "volatile", gas: "Ethane" },
-    { name: "Nitrogen",    color: "#818cf8", freeze: -210, boil: -195, tag: "N",  cloud: "#f1f5f9", frozenColor: "#93c5fd", type: "volatile", gas: "Nitrogen" },
-    { name: "Liquid Oxygen",color: "#bfdbfe", freeze: -218, boil: -183,tag: "O",  cloud: "#e0f2fe", frozenColor: "#3b82f6", type: "volatile", gas: "Oxygen" },
-    
-    // ACIDS & TOXINS (Greens/Yellows/Pinks)
-    { name: "Vinegar",     color: "#eab308", freeze: -2,   boil: 118,  tag: "C",  cloud: "#fef9c3", frozenColor: "#facc15", type: "acid",     gas: "Acetic Acid" },
-    { name: "Ammonia",     color: "#14b8a6", freeze: -77,  boil: -33,  tag: "N",  cloud: "#ccfbf1", frozenColor: "#5eead4", type: "acid",     gas: "Ammonia" },
-    { name: "Chlorine",    color: "#a3e635", freeze: -101, boil: -34,  tag: "Cl", cloud: "#d9f99d", frozenColor: "#84cc16", type: "acid",     gas: "Chlorine Gas" },
-    { name: "Sulfuric Acid", color: "#f59e0b", freeze: 10,  boil: 337,  tag: "S",  cloud: "#fef08a", frozenColor: "#fbbf24", type: "acid",    gas: "Sulfur Dioxide" },
-    { name: "Nitric Acid",   color: "#f43f5e", freeze: -42, boil: 83,   tag: "N",  cloud: "#fca5a5", frozenColor: "#fb7185", type: "acid",    gas: "Nitrogen Dioxide" },
-    { name: "Cyanide",       color: "#cffafe", freeze: -13, boil: 26,   tag: "C",  cloud: "#ecfeff", frozenColor: "#a5f3fc", type: "acid",    gas: "Hydrogen Cyanide" },
-    { name: "Neon Goo",      color: "#39ff14", freeze: -50, boil: 150,  tag: "X",  cloud: "#bef264", frozenColor: "#1a2e05", type: "viscous", gas: "Radioactive Vapor" },
+    // --- WATER & AQUEOUS (Blues/Teals) ---
+    { name: "Water",           color: "#3b82f6", freeze: 0,    boil: 100,  tag: "H2O", cloud: "#ffffff", frozenColor: "#bfdbfe", type: "standard", gas: "Oxygen" },
+    { name: "Salt Water",      color: "#1d4ed8", freeze: -2,   boil: 102,  tag: "H2O", cloud: "#f1f5f9", frozenColor: "#a5b4fc", type: "standard", gas: "Oxygen" },
+    { name: "Mineral Water",   color: "#22d3ee", freeze: 0,    boil: 100,  tag: "H2O", cloud: "#ecfeff", frozenColor: "#cffafe", type: "standard", gas: "Oxygen" },
+    { name: "Heavy Water",     color: "#60a5fa", freeze: 3.8,  boil: 101,  tag: "D2O", cloud: "#e0f2fe", frozenColor: "#93c5fd", type: "standard", gas: "Deuterium" },
+    { name: "Brine",           color: "#0891b2", freeze: -21,  boil: 108,  tag: "H2O", cloud: "#f0f9ff", frozenColor: "#bae6fd", type: "standard", gas: "Chlorine" },
+    { name: "Swamp Water",     color: "#3f6212", freeze: -1,   boil: 100,  tag: "Bio", cloud: "#d9f99d", frozenColor: "#65a30d", type: "organic",  gas: "Methane" },
+    { name: "Mud Water",       color: "#78350f", freeze: 0,    boil: 100,  tag: "Si",  cloud: "#d6d3d1", frozenColor: "#57534e", type: "viscous",  gas: "Oxygen" },
 
-    // METALS & MAGMA (Reds/Oranges/Greys)
-    { name: "Lava",        color: "#ea580c", freeze: 700,  boil: 3000, tag: "Si", cloud: "#57534e", frozenColor: "#292524", type: "magma",    gas: "Silicate Vapor" },
-    { name: "Mercury",     color: "#94a3b8", freeze: -39,  boil: 357,  tag: "Fe", cloud: "#e2e8f0", frozenColor: "#64748b", type: "metal",    gas: "Mercury Vapor" },
-    { name: "Liquid Gallium",color: "#cbd5e1", freeze: 29,  boil: 2400, tag: "Fe", cloud: "#f1f5f9", frozenColor: "#64748b", type: "metal",   gas: "Metal Vapor" },
-    { name: "Liquid Gold",   color: "#fcd34d", freeze: 1064,boil: 2700, tag: "Fe", cloud: "#fffbeb", frozenColor: "#b45309", type: "metal",   gas: "Gold Vapor" },
-    
-    // ORGANIC & WEIRD (Browns/Blacks/Reds)
-    { name: "Crude Oil",   color: "#0f172a", freeze: -57,  boil: 200,  tag: "C",  cloud: "#52525b", frozenColor: "#020617", type: "viscous",  gas: "Petroleum Gas" },
-    { name: "Tar",         color: "#020617", freeze: -10,  boil: 300,  tag: "C",  cloud: "#27272a", frozenColor: "#000000", type: "viscous",  gas: "Smoke" },
-    { name: "Blood",       color: "#991b1b", freeze: -2,   boil: 100,  tag: "Bio",cloud: "#fca5a5", frozenColor: "#7f1d1d", type: "organic",  gas: "Iron Oxide" },
-    { name: "Honey",       color: "#d97706", freeze: -20,  boil: 120,  tag: "Bio",cloud: "#fde68a", frozenColor: "#b45309", type: "viscous",  gas: "Sugar Smoke" },
-    { name: "Slime",       color: "#4ade80", freeze: 0,    boil: 110,  tag: "Bio",cloud: "#bbf7d0", frozenColor: "#16a34a", type: "organic",  gas: "Methane" },
-    { name: "Chocolate",   color: "#451a03", freeze: 25,   boil: 150,  tag: "Bio",cloud: "#d6d3d1", frozenColor: "#290e02", type: "viscous",  gas: "Cocoa Dust" },
-    { name: "Purple Ooze", color: "#9333ea", freeze: -100, boil: 50,   tag: "X",  cloud: "#e9d5ff", frozenColor: "#581c87", type: "viscous",  gas: "Unknown Gas" },
-    { name: "Liquid Void", color: "#000000", freeze: -273, boil: -270, tag: "X",  cloud: "#18181b", frozenColor: "#000000", type: "standard", gas: "Dark Matter" }
+    // --- CRYOGENIC & VOLATILE (Cyans/Whites/Purples) ---
+    { name: "Oxygen",          color: "#93c5fd", freeze: -218, boil: -183, tag: "O",   cloud: "#e0f2fe", frozenColor: "#3b82f6", type: "volatile", gas: "Oxygen" },
+    { name: "Nitrogen",        color: "#818cf8", freeze: -210, boil: -195, tag: "N",   cloud: "#f1f5f9", frozenColor: "#6366f1", type: "volatile", gas: "Nitrogen" },
+    { name: "Hydrogen",        color: "#f0abfc", freeze: -259, boil: -252, tag: "H",   cloud: "#ffffff", frozenColor: "#e879f9", type: "volatile", gas: "Hydrogen" },
+    { name: "Helium",          color: "#d8b4fe", freeze: -272, boil: -268, tag: "He",  cloud: "#ffffff", frozenColor: "#c084fc", type: "volatile", gas: "Helium" },
+    { name: "Argon",           color: "#c084fc", freeze: -189, boil: -185, tag: "Ar",  cloud: "#e9d5ff", frozenColor: "#a855f7", type: "volatile", gas: "Argon" },
+    { name: "Methane",         color: "#06b6d4", freeze: -182, boil: -161, tag: "C",   cloud: "#bae6fd", frozenColor: "#bae6fd", type: "volatile", gas: "Methane" },
+    { name: "Propane",         color: "#67e8f9", freeze: -187, boil: -42,  tag: "C",   cloud: "#e0f2fe", frozenColor: "#22d3ee", type: "volatile", gas: "Propane" },
+
+    // --- FUELS & SOLVENTS (Yellows/Ambers/Clears) ---
+    { name: "Ethanol",         color: "#f1f5f9", freeze: -114, boil: 78,   tag: "C",   cloud: "#f8fafc", frozenColor: "#cbd5e1", type: "volatile", gas: "Carbon Monoxide" },
+    { name: "Acetone",         color: "#e2e8f0", freeze: -95,  boil: 56,   tag: "C",   cloud: "#f8fafc", frozenColor: "#94a3b8", type: "volatile", gas: "Carbon Monoxide" },
+    { name: "Gasoline",        color: "#facc15", freeze: -60,  boil: 200,  tag: "C",   cloud: "#fef08a", frozenColor: "#eab308", type: "standard", gas: "Carbon Dioxide" },
+    { name: "Diesel",          color: "#d97706", freeze: -10,  boil: 300,  tag: "C",   cloud: "#78350f", frozenColor: "#92400e", type: "viscous",  gas: "Carbon Dioxide" },
+    { name: "Kerosene",        color: "#fbbf24", freeze: -40,  boil: 250,  tag: "C",   cloud: "#fef3c7", frozenColor: "#f59e0b", type: "standard", gas: "Carbon Dioxide" },
+    { name: "Napalm",          color: "#ea580c", freeze: -30,  boil: 200,  tag: "C",   cloud: "#9a3412", frozenColor: "#7c2d12", type: "viscous",  gas: "Carbon Dioxide" },
+    { name: "Crude Oil",       color: "#0f172a", freeze: -57,  boil: 200,  tag: "C",   cloud: "#52525b", frozenColor: "#020617", type: "viscous",  gas: "Carbon Monoxide" },
+    { name: "Tar",             color: "#171717", freeze: -10,  boil: 300,  tag: "C",   cloud: "#404040", frozenColor: "#0a0a0a", type: "viscous",  gas: "Carbon Dioxide" },
+
+    // --- ACIDS, TOXINS & CHEMICALS (Greens/Neons/Pinks) ---
+    { name: "Acid",            color: "#65a30d", freeze: 10,   boil: 337,  tag: "S",   cloud: "#d9f99d", frozenColor: "#365314", type: "acid",     gas: "Sulfur" },
+    { name: "Vinegar",         color: "#fef08a", freeze: -2,   boil: 118,  tag: "C",   cloud: "#fef9c3", frozenColor: "#facc15", type: "acid",     gas: "Carbon Monoxide" },
+    { name: "Ammonia",         color: "#2dd4bf", freeze: -77,  boil: -33,  tag: "N",   cloud: "#99f6e4", frozenColor: "#0d9488", type: "acid",     gas: "Nitrogen" },
+    { name: "Chlorine",        color: "#84cc16", freeze: -101, boil: -34,  tag: "Cl",  cloud: "#bef264", frozenColor: "#4d7c0f", type: "acid",     gas: "Chlorine" },
+    { name: "Bleach",          color: "#e0f2fe", freeze: -6,   boil: 101,  tag: "Cl",  cloud: "#f0f9ff", frozenColor: "#bae6fd", type: "standard", gas: "Chlorine" },
+    { name: "Peroxide",        color: "#cbd5e1", freeze: -0.4, boil: 150,  tag: "O",   cloud: "#e0f2fe", frozenColor: "#64748b", type: "standard", gas: "Oxygen" },
+    { name: "Cyanide",         color: "#cffafe", freeze: -13,  boil: 26,   tag: "C",   cloud: "#ecfeff", frozenColor: "#22d3ee", type: "acid",     gas: "Nitrogen" },
+    { name: "Formaldehyde",    color: "#f0f9ff", freeze: -92,  boil: -19,  tag: "C",   cloud: "#e0f2fe", frozenColor: "#bae6fd", type: "acid",     gas: "Carbon Monoxide" },
+    { name: "Bromine",         color: "#991b1b", freeze: -7,   boil: 58,   tag: "Br",  cloud: "#7f1d1d", frozenColor: "#450a0a", type: "standard", gas: "Bromine" },
+    { name: "Mercury",         color: "#94a3b8", freeze: -39,  boil: 357,  tag: "Hg",  cloud: "#e2e8f0", frozenColor: "#475569", type: "metal",    gas: "Mercury" },
+    { name: "Gallium",         color: "#cbd5e1", freeze: 29,   boil: 2400, tag: "Ga",  cloud: "#f1f5f9", frozenColor: "#64748b", type: "metal",    gas: "Gallium" },
+
+    // --- BIOLOGICAL & ORGANIC (Reds/Browns/Pastels) ---
+    { name: "Blood",           color: "#991b1b", freeze: -2,   boil: 100,  tag: "Bio", cloud: "#fca5a5", frozenColor: "#7f1d1d", type: "organic",  gas: "Steam" },
+    { name: "Plasma",          color: "#fde68a", freeze: -1,   boil: 100,  tag: "Bio", cloud: "#fef3c7", frozenColor: "#d97706", type: "organic",  gas: "Steam" },
+    { name: "Venom",           color: "#a21caf", freeze: -5,   boil: 120,  tag: "Bio", cloud: "#e879f9", frozenColor: "#701a75", type: "acid",     gas: "Unknown" },
+    { name: "Honey",           color: "#ea580c", freeze: -20,  boil: 120,  tag: "Bio", cloud: "#fde68a", frozenColor: "#9a3412", type: "viscous",  gas: "Carbon Dioxide" },
+	
+    // --- MOLTEN & HIGH ENERGY (Reds/Oranges) ---
+    { name: "Lava",            color: "#ef4444", freeze: 700,  boil: 3000, tag: "Si",  cloud: "#57534e", frozenColor: "#292524", type: "magma",    gas: "Silicate" },
+    { name: "Magma",           color: "#c2410c", freeze: 800,  boil: 3200, tag: "Si",  cloud: "#44403c", frozenColor: "#1c1917", type: "magma",    gas: "Silicate" },
+    { name: "Gold",            color: "#fbbf24", freeze: 1064, boil: 2700, tag: "Au",  cloud: "#fffbeb", frozenColor: "#b45309", type: "metal",    gas: "Vaporized Gold" },
+    { name: "Iron",            color: "#f97316", freeze: 1538, boil: 2862, tag: "Fe",  cloud: "#ffedd5", frozenColor: "#c2410c", type: "metal",    gas: "Vaporized Iron" },
+    { name: "Copper",          color: "#f87171", freeze: 1085, boil: 2562, tag: "Cu",  cloud: "#fecaca", frozenColor: "#991b1b", type: "metal",    gas: "Vaporized Copper" },
+    { name: "Lead",            color: "#9ca3af", freeze: 327,  boil: 1749, tag: "Pb",  cloud: "#e5e7eb", frozenColor: "#4b5563", type: "metal",    gas: "Vaporized Lead" },
+
+    // --- HOUSEHOLD & QUIRKY (Varied) ---
+    { name: "Chocolate",       color: "#451a03", freeze: 25,   boil: 150,  tag: "Bio", cloud: "#d6d3d1", frozenColor: "#290e02", type: "viscous",  gas: "Carbon Dioxide" },
 ];
 
 const SOLIDS = [
-    // COMMON ROCKS (Greys/Beiges)
-    { name: "Silicate",   color: "#a8a29e", tag: "Si", roughness: 1.0, type: "rock", melt: 1200 },
-    { name: "Basalt",     color: "#27272a", tag: "Si", roughness: 1.0, type: "rock", melt: 1100 },
-    { name: "Granite",    color: "#d6c0b6", tag: "Si", roughness: 1.3, type: "rock", melt: 1215 },
-    { name: "Sandstone",  color: "#d97706", tag: "Si", roughness: 0.5, type: "rock", melt: 1300 },
-    { name: "Limestone",  color: "#e7e5e4", tag: "C",  roughness: 0.8, type: "rock", melt: 900 },
-    { name: "Slate",      color: "#475569", tag: "Si", roughness: 0.9, type: "rock", melt: 1200 },
-    { name: "Marble",     color: "#f1f5f9", tag: "C",  roughness: 0.7, type: "rock", melt: 1200 },
-    { name: "Regolith",   color: "#a3a3a3", tag: "Si", roughness: 1.4, type: "dust", melt: 1200 },
-    { name: "Black Sand", color: "#18181b", tag: "Si", roughness: 1.1, type: "rock", melt: 1200 },
-    { name: "Obsidian",   color: "#2e1065", tag: "Si", roughness: 1.1, type: "glass", melt: 1000 },
-    { name: "Graphite",   color: "#334155", tag: "C",  roughness: 0.8, type: "rock", melt: 3600 },
+    // --- ROCKS & GEOLOGY (Greys/Browns) ---
+    { name: "Stone",           color: "#78716c", tag: "Si", roughness: 1.0, type: "rock", melt: 1200 },
+    { name: "Basalt",          color: "#27272a", tag: "Si", roughness: 1.0, type: "rock", melt: 1100 },
+    { name: "Granite",         color: "#a8a29e", tag: "Si", roughness: 1.3, type: "rock", melt: 1215 },
+    { name: "Bedrock",         color: "#1c1917", tag: "Si", roughness: 2.0, type: "rock", melt: 4000 },
+    { name: "Sandstone",       color: "#d97706", tag: "Si", roughness: 0.5, type: "rock", melt: 1300 },
+    { name: "Limestone",       color: "#e7e5e4", tag: "C",  roughness: 0.8, type: "rock", melt: 900 },
+    { name: "Slate",           color: "#475569", tag: "Si", roughness: 0.9, type: "rock", melt: 1200 },
+    { name: "Marble",          color: "#cbd5e1", tag: "C",  roughness: 0.7, type: "rock", melt: 1200 },
+    { name: "Pumice",          color: "#9ca3af", tag: "Si", roughness: 1.5, type: "rock", melt: 1000 },
+    { name: "Obsidian",        color: "#2e1065", tag: "Si", roughness: 1.1, type: "glass",melt: 1000 },
+    { name: "Flint",           color: "#374151", tag: "Si", roughness: 0.9, type: "rock", melt: 1700 },
+    { name: "Coal",            color: "#0f172a", tag: "C",  roughness: 0.8, type: "rock", melt: 3500 },
+    { name: "Chalk",           color: "#e5e7eb", tag: "C",  roughness: 0.6, type: "rock", melt: 825 },
+    { name: "Shale",           color: "#334155", tag: "Si", roughness: 0.7, type: "rock", melt: 1100 },
 
-    // ICES (Whites/Blues)
-    { name: "Water Ice",  color: "#e0f2fe", tag: "C",  roughness: 0.7, type: "ice", melt: 0 },
-    { name: "Dry Ice",    color: "#eef2ff", tag: "C",  roughness: 0.4, type: "ice", melt: -78 },
-    { name: "Blue Ice",   color: "#60a5fa", tag: "C",  roughness: 0.9, type: "ice", melt: 0 },
-    { name: "Methane Ice",color: "#38bdf8", tag: "C",  roughness: 0.5, type: "ice", melt: -182 },
+    // --- SOILS & PARTICLES (Earth Tones) ---
+    { name: "Dirt",            color: "#573c29", tag: "Si", roughness: 1.0, type: "dust", melt: 1100 },
+    { name: "Mud",             color: "#451a03", tag: "Si", roughness: 0.9, type: "dust", melt: 1100 },
+    { name: "Clay",            color: "#9a3412", tag: "Si", roughness: 0.6, type: "dust", melt: 1000 },
+    { name: "Sand",            color: "#fde047", tag: "Si", roughness: 1.2, type: "dust", melt: 1700 },
+    { name: "Red Sand",        color: "#ea580c", tag: "Si", roughness: 1.2, type: "dust", melt: 1600 },
+    { name: "Black Sand",      color: "#18181b", tag: "Si", roughness: 1.1, type: "dust", melt: 1200 },
+    { name: "Gravel",          color: "#9ca3af", tag: "Si", roughness: 1.5, type: "rock", melt: 1200 },
+    { name: "Ash",             color: "#d6d3d1", tag: "C",  roughness: 1.4, type: "dust", melt: 1000 },
+    { name: "Soot",            color: "#171717", tag: "C",  roughness: 1.2, type: "dust", melt: 3000 },
+    { name: "Salt",            color: "#e5e7eb", tag: "Na", roughness: 0.8, type: "dust", melt: 801 },
 
-    // MINERALS & CRYSTALS (Vibrant)
-    { name: "Red Clay",   color: "#7c2d12", tag: "Si", roughness: 0.6, type: "rock", melt: 1000 },
-    { name: "Malachite",  color: "#059669", tag: "Fe", roughness: 1.0, type: "rock", melt: 1100 },
-    { name: "Sulfur",     color: "#fde047", tag: "S",  roughness: 0.8, type: "rock", melt: 115 },
-    { name: "Cobalt",     color: "#1e3a8a", tag: "Fe", roughness: 1.1, type: "metal",melt: 1495 },
-    { name: "Amethyst",   color: "#7e22ce", tag: "Si", roughness: 1.4, type: "glass",melt: 1650 },
-    { name: "Jade",       color: "#10b981", tag: "Si", roughness: 0.8, type: "rock", melt: 1000 },
+    // --- ORES & METALS (Metallics/Reds/Golds) ---
+    { name: "Iron Ore",        color: "#7f1d1d", tag: "Fe", roughness: 1.2, type: "metal", melt: 1538 },
+    { name: "Magnetite",       color: "#1e293b", tag: "Fe", roughness: 1.1, type: "metal", melt: 1590 },
+    { name: "Rust",            color: "#b45309", tag: "Fe", roughness: 1.5, type: "metal", melt: 1500 },
+    { name: "Gold",            color: "#facc15", tag: "Au", roughness: 1.0, type: "metal", melt: 1064 },
+    { name: "Pyrite",          color: "#ca8a04", tag: "Fe", roughness: 1.3, type: "rock",  melt: 1100 },
+    { name: "Silver",          color: "#cbd5e1", tag: "Ag", roughness: 0.8, type: "metal", melt: 961 },
+    { name: "Copper",          color: "#f97316", tag: "Cu", roughness: 0.9, type: "metal", melt: 1085 },
+    { name: "Bronze",          color: "#cd7f32", tag: "Cu", roughness: 0.9, type: "metal", melt: 950 },
+    { name: "Steel",           color: "#64748b", tag: "Fe", roughness: 0.8, type: "metal", melt: 1370 },
+    { name: "Lead",            color: "#475569", tag: "Pb", roughness: 0.6, type: "metal", melt: 327 },
+    { name: "Tin",             color: "#94a3b8", tag: "Sn", roughness: 0.7, type: "metal", melt: 231 },
+    { name: "Aluminum",        color: "#d1d5db", tag: "Al", roughness: 0.6, type: "metal", melt: 660 },
+    { name: "Titanium",        color: "#334155", tag: "Ti", roughness: 0.9, type: "metal", melt: 1668 },
+    { name: "Tungsten",        color: "#1f2937", tag: "W",  roughness: 1.0, type: "metal", melt: 3422 },
+    { name: "Cobalt",          color: "#1e3a8a", tag: "Co", roughness: 1.1, type: "metal", melt: 1495 },
+    { name: "Uranium",         color: "#166534", tag: "U",  roughness: 1.0, type: "metal", melt: 1132 },
 
-    // METALS (Metallics)
-    { name: "Iron Ore",   color: "#7f1d1d", tag: "Fe", roughness: 1.2, type: "metal", melt: 1538 },
-    { name: "Gold Vein",  color: "#fbbf24", tag: "Fe", roughness: 1.0, type: "metal", melt: 1064 },
-    { name: "Copper Ox",  color: "#0d9488", tag: "Fe", roughness: 0.8, type: "metal", melt: 1085 },
-    { name: "Titanium",   color: "#e2e8f0", tag: "Fe", roughness: 0.9, type: "metal", melt: 1668 },
-    
-    // BIO / WEIRD (Organic)
-    { name: "Bone",       color: "#e5e5e5", tag: "Bio", roughness: 0.9, type: "organic", melt: 200 },
-    { name: "Flesh",      color: "#fb7185", tag: "Bio", roughness: 0.5, type: "organic", melt: 100 },
-    { name: "Chitin",     color: "#92400e", tag: "Bio", roughness: 0.7, type: "organic", melt: 260 },
-    { name: "Mycelium",   color: "#ddd6fe", tag: "Bio", roughness: 1.2, type: "organic", melt: 150 },
+    // --- GEMSTONES & CRYSTALS (Vibrant) ---
+    { name: "Quartz",          color: "#e2e8f0", tag: "Si", roughness: 1.1, type: "glass", melt: 1670 },
+    { name: "Diamond",         color: "#cffafe", tag: "C",  roughness: 1.5, type: "glass", melt: 4000 },
+    { name: "Ruby",            color: "#dc2626", tag: "Al", roughness: 1.2, type: "glass", melt: 2050 },
+    { name: "Sapphire",        color: "#2563eb", tag: "Al", roughness: 1.2, type: "glass", melt: 2040 },
+    { name: "Emerald",         color: "#10b981", tag: "Si", roughness: 1.1, type: "glass", melt: 1200 },
+    { name: "Amethyst",        color: "#a855f7", tag: "Si", roughness: 1.3, type: "glass", melt: 1650 },
+    { name: "Topaz",           color: "#fb923c", tag: "Si", roughness: 1.1, type: "glass", melt: 1600 },
+    { name: "Opal",            color: "#fda4af", tag: "Si", roughness: 0.9, type: "glass", melt: 1000 },
+    { name: "Malachite",       color: "#064e3b", tag: "Cu", roughness: 1.0, type: "rock",  melt: 1100 },
+    { name: "Sulfur",          color: "#fde047", tag: "S",  roughness: 0.8, type: "rock",  melt: 115 },
+
+    // --- ICES (Whites/Blues) ---
+    { name: "Ice",             color: "#bae6fd", tag: "H2O",roughness: 0.7, type: "ice",   melt: 0 },
+    { name: "Blue Ice",        color: "#60a5fa", tag: "H2O",roughness: 0.9, type: "ice",   melt: 0 },
+    { name: "Permafrost",      color: "#9ca3af", tag: "Si", roughness: 1.1, type: "ice",   melt: 0 },
+    { name: "Nitrogen Ice",    color: "#c7d2fe", tag: "N",  roughness: 0.5, type: "ice",   melt: -210 },
+    { name: "Methane Ice",     color: "#38bdf8", tag: "C",  roughness: 0.5, type: "ice",   melt: -182 },
+
+    // --- BIOLOGICAL & ORGANIC (Naturals) ---
+    { name: "Grass",           color: "#4ade80", tag: "Bio", roughness: 0.5, type: "organic", melt: 100 },
+    { name: "Moss",            color: "#3f6212", tag: "Bio", roughness: 1.2, type: "organic", melt: 100 },
+    { name: "Bone",            color: "#e5e5e5", tag: "Bio", roughness: 0.9, type: "organic", melt: 200 },
+    { name: "Flesh",           color: "#fb7185", tag: "Bio", roughness: 0.5, type: "organic", melt: 100 },
+    { name: "Chitin",          color: "#92400e", tag: "Bio", roughness: 0.7, type: "organic", melt: 260 },
+    { name: "Mycelium",        color: "#ddd6fe", tag: "Bio", roughness: 1.2, type: "organic", melt: 150 },
+    { name: "Coral",           color: "#f87171", tag: "Bio", roughness: 1.3, type: "organic", melt: 900 },
+
+    // --- ARTIFICIAL & MAN-MADE (Varied) ---
+    { name: "Glass",           color: "#e0f2fe", tag: "Si", roughness: 0.1, type: "glass", melt: 1400 },
+    { name: "Concrete",        color: "#d4d4d8", tag: "Si", roughness: 0.9, type: "rock",  melt: 1500 },
+    { name: "Asphalt",         color: "#18181b", tag: "C",  roughness: 0.7, type: "rock",  melt: 175 },
+    { name: "Plastic",         color: "#22d3ee", tag: "C",  roughness: 0.2, type: "organic", melt: 160 },
+    { name: "Wax",             color: "#fef9c3", tag: "C",  roughness: 0.4, type: "organic", melt: 60 },
+    { name: "Ceramic",         color: "#ffedd5", tag: "Si", roughness: 0.6, type: "rock",  melt: 2000 },
 ];
 
 function hexToHSL(hex) {
@@ -702,16 +765,41 @@ function generatePlanetData(rng) {
     } else {
         atmosName = "Vacuum";
     }
+    
+    // --- LIFE GENERATION LOGIC ---
     let hasLife = false, lifeType = "None", bioColor = null, bioMinT = 0, bioMaxT = 0;
+    
     if (liquidState === "liquid") {
-        if (["Water", "Salt Water"].includes(liquid.name) && baseTemp > -15 && baseTemp < 60) {
-            hasLife = true; lifeType = "Carbon-Based"; bioColor = "#10b981";
-            bioMinT = -15; bioMaxT = 60;
-        } else if (baseTemp > 200 && baseTemp < 1000 && solid.tag === "Si") {
-            hasLife = true; lifeType = "Silicon-Based"; bioColor = "#9333ea";
-            bioMinT = 200; bioMaxT = 1000;
+        // Carbon-Based Life: Needs Water (H2O) and moderate temps
+        if (liquid.tag === "H2O" && baseTemp > -20 && baseTemp < 80) {
+            hasLife = true; 
+            lifeType = "Carbon-Based"; 
+            bioColor = "#10b981"; // Green
+            bioMinT = -20; bioMaxT = 80;
+        } 
+        // Silicon-Based Life: Needs Silicon (Si) solid and high temps
+        else if (solid.tag === "Si" && baseTemp > 400 && baseTemp < 1200) {
+            hasLife = true; 
+            lifeType = "Silicon-Based"; 
+            bioColor = "#9333ea"; // Purple
+            bioMinT = 400; bioMaxT = 1200;
+        }
+        // Hydrocarbon Life: Needs Methane/Ethane (C) and very cold temps
+        else if (liquid.tag === "C" && baseTemp < -100) {
+            hasLife = true;
+            lifeType = "Hydrocarbon-Based";
+            bioColor = "#f43f5e"; // Rose
+            bioMinT = -200; bioMaxT = -100;
+        }
+        // Exotic/Radiotrophic Life: Needs Radiation (U)
+        else if (solid.tag === "U" || solid.tag === "X") {
+            hasLife = true;
+            lifeType = "Radiotrophic";
+            bioColor = "#bef264"; // Lime Neon
+            bioMinT = baseTemp - 50; bioMaxT = baseTemp + 50;
         }
     }
+
     const getLatForTemp = (t) => (maxT === minT) ? 0.5 : (maxT - t) / (maxT - minT);
     let latBoil = getLatForTemp(liquid.boil || 9999);
     let latFreeze = getLatForTemp(liquid.freeze || 9998);
@@ -729,24 +817,40 @@ function generatePalette(data) {
     const s = data.solid.color;
     return [
         // Deep shadows and lowlands
-        artColor(s, -40, 10, -15), 
-        artColor(s, -25, 5, -10), 
-        artColor(s, -15, 0, -5), 
+        artColor(s, -60, 0, -27),    // N=0: No change
+        artColor(s, -43, -4, -20),   // N=1: +3, +1, +2
+        artColor(s, -30, -8, -14),   // N=2: +5, +2, +3
         // Base color
         s,
         // Brighter as we move inland
-		artColor(s, 4, 0, 1), 
-        artColor(s, 8, -3, 3), 
-        artColor(s, 10, -4, 3), 
-        artColor(s, 13, -5, 4), 
-        artColor(s, 18, -8, 6), 
-        artColor(s, 25, -13, 10)
+        artColor(s, -8, -6, -6),     // N=3: +8, +4, +5
+        artColor(s, -4, -8, -2),     // N=4: +10, +5, +6
+        artColor(s, 0, -7, 0),       // N=5: +13, +6, +8
+        artColor(s, 4, -7, 3),       // N=6: +15, +7, +11
+        artColor(s, 11, -8, 7),      // N=7: +18, +8, +11
+        artColor(s, 13, -11, 11),    // N=8: +20, +10, +12
+        artColor(s, 21, -12, 16),    // N=9: +23, +11, +14
+        artColor(s, 21, -12, 16),    // Duplicate: No offset shift
+        artColor(s, 28, -14, 21),    // N=10: +25, +12, +15
+        artColor(s, 28, -14, 21),    // Duplicate
+        artColor(s, 28, -14, 21),    // Duplicate
+        artColor(s, 36, -16, 26),    // N=11: +28, +13, +17
+        artColor(s, 36, -16, 26),    // Duplicate
+        artColor(s, 42, -17, 32)     // N=12: +30, +14, +18
     ];
 }
 
 function getTagHtml(tag) {
-    const map = { 'C':'tag-c', 'Si':'tag-si', 'Fe':'tag-fe', 'X':'tag-x', 'N':'tag-none', 'O':'tag-none', 'S':'tag-fe', 'Bio':'tag-bio' };
-    const cls = map[tag] || 'tag-none';
+    // Map tags to 6 generic color classes
+    const colorMap = {
+        'C': 'tag-c', 'H2O': 'tag-si', 'Bio': 'tag-bio',
+        'Fe': 'tag-fe', 'Au': 'tag-fe', 'Cu': 'tag-fe', 'Ag': 'tag-fe', 'Pb': 'tag-fe', 'Sn': 'tag-fe', 'Al': 'tag-fe', 'Ti': 'tag-fe', 'W': 'tag-fe', 'Co': 'tag-fe',
+        'Si': 'tag-fe', 'S': 'tag-fe', 'Na': 'tag-fe',
+        'H': 'tag-si', 'He': 'tag-si', 'O': 'tag-si', 'N': 'tag-si', 'Ar': 'tag-si', 'Cl': 'tag-si', 'Br': 'tag-si', 'D2O': 'tag-si',
+        'U': 'tag-x', 'Hg': 'tag-x', 'Ga': 'tag-x', 'X': 'tag-x'
+    };
+    
+    const cls = colorMap[tag] || 'tag-none';
     return `<span class="tag ${cls}">[${tag}]</span>`;
 }
 

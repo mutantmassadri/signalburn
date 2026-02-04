@@ -1,9 +1,11 @@
+<!-- START OF FILE index.html -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SB PLANETGEN V12.5 - HYBRID</title>
+    <title>SB PLANETGEN V12.5 - TURBO</title>
     <style>
         /* --- CORE VISUALS --- */
         :root {
@@ -43,17 +45,6 @@
             cursor: grab;
         }
         .stage:active { cursor: grabbing; }
-
-        .stars { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; pointer-events: none; }
-        .star {
-            position: absolute; background: white; border-radius: 50%; opacity: 0;
-            animation: flicker 4s infinite ease-in-out;
-        }
-        @keyframes flicker {
-            0% { opacity: 0.1; transform: scale(0.5); }
-            50% { opacity: 0.8; transform: scale(1); }
-            100% { opacity: 0.1; transform: scale(0.5); }
-        }
 
         /* THE 3D CANVAS */
         #webgl-canvas {
@@ -223,7 +214,6 @@
 <body>
 
     <div class="stage" id="stage">
-        <div class="stars" id="starfield"></div>
         <canvas id="webgl-canvas"></canvas>
     </div>
 
@@ -258,16 +248,11 @@
             </defs>
             <g id="bake-group-clouds" filter="url(#cloud-fluff)"></g>
         </svg>
-
-        <!-- Ring Baker -->
-        <svg id="ring-baker" width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-            <g id="bake-group-rings"></g>
-        </svg>
     </div>
 
     <div class="deck">
         <div class="deck-header">
-            <h1>SB PLANETGEN <span class="version">V12.5</span></h1>
+            <h1>SB PLANETGEN <span class="version">V12.5 T</span></h1>
             <div class="seed-row">
                 <input type="text" id="seed-input" value="TERRA-PRIME">
                 <button class="btn-icon" id="btn-rnd" title="Randomize">🎲</button>
@@ -339,7 +324,7 @@
 import * as THREE from 'https://esm.sh/three';
 
 /**
- * SB PLANETGEN V12.5 - HYBRID HIGH FIDELITY
+ * SB PLANETGEN V12.5 TURBO - HYBRID HIGH FIDELITY OPTIMIZED
  */
 
 /* --- DATA CONSTANTS --- */
@@ -505,6 +490,14 @@ function artColor(hex, lShift, sShift = 0, hShift = 0) {
     return hslToHex(newH, newS, newL);
 }
 
+// Convert Hex to RGB Unit (0-1) for SVG Filters
+function hexToRgbUnit(hex) {
+    let r = parseInt(hex.substring(1,3), 16) / 255;
+    let g = parseInt(hex.substring(3,5), 16) / 255;
+    let b = parseInt(hex.substring(5,7), 16) / 255;
+    return {r: r.toFixed(3), g: g.toFixed(3), b: b.toFixed(3)};
+}
+
 function createRNG(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -540,7 +533,6 @@ const state = {
     shadow: 50,
     cloudsEnabled: true,
     autoRotate: true,
-    layerThresholds: [],
     // 3D Physics
     rotationSpeed: 0.1,
     isDragging: false,
@@ -557,12 +549,10 @@ const dom = {
     bIce: document.getElementById('bake-group-ice'),
     bBio: document.getElementById('bake-group-bio'),
     bClouds: document.getElementById('bake-group-clouds'),
-    bRings: document.getElementById('bake-group-rings'),
     bBg: document.getElementById('bake-bg'),
     // SVGs
     svgSurface: document.getElementById('surface-baker'),
     svgClouds: document.getElementById('cloud-baker'),
-    svgRings: document.getElementById('ring-baker'),
     // Inputs
     seedInput: document.getElementById('seed-input'),
     btnRnd: document.getElementById('btn-rnd'),
@@ -596,16 +586,6 @@ camera.position.z = 3.8;
 // Planet Group (Rotates)
 const planetGroup = new THREE.Group();
 scene.add(planetGroup);
-
-// Glow Mesh (Locked, Static background)
-// Repurposed from old ring system to create a soft halo behind the planet
-const glowGeo = new THREE.PlaneGeometry(3.5, 3.5);
-const glowMat = new THREE.MeshBasicMaterial({ 
-    transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending 
-});
-const glowMesh = new THREE.Mesh(glowGeo, glowMat);
-glowMesh.position.z = -1; // Behind planet
-scene.add(glowMesh);
 
 // Sphere (Surface)
 const geometry = new THREE.SphereGeometry(1, 128, 128); // Higher poly for smoothness
@@ -657,16 +637,6 @@ const atmosMat = new THREE.ShaderMaterial({
 });
 const atmosMesh = new THREE.Mesh(atmosGeo, atmosMat);
 planetGroup.add(atmosMesh);
-
-// Rings (High Res Plane) - The "Proper" flat rings
-const ringGeo = new THREE.PlaneGeometry(3.0, 3.0);
-const ringMat = new THREE.MeshStandardMaterial({ 
-    side: THREE.DoubleSide, transparent: true, opacity: 0.95, roughness: 0.8
-});
-const ringMesh = new THREE.Mesh(ringGeo, ringMat);
-ringMesh.rotation.x = -Math.PI / 2;
-ringMesh.visible = false;
-planetGroup.add(ringMesh);
 
 // Lights
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.02); // Start dark
@@ -821,7 +791,6 @@ function generateCloudsSVG(rng, data) {
         return systemElements;
     };
 
-    let allPaths = "";
     const clusterCount = Math.floor(rng() * 3) + 3;
     const range = 1.85; 
     const zoneSize = range / clusterCount;
@@ -843,109 +812,12 @@ function generateCloudsSVG(rng, data) {
         const els = generateCloudSystem(spine, col, yBase);
         tileInner += els.join('');
     }
-    // Duplicate for wrapping
-    allPaths += `<g transform="translate(-2048,0)">${tileInner}</g>`;
+    // Duplicate for wrapping - OPTIMIZED: Using Groups
+    let allPaths = `<g transform="translate(-2048,0)">${tileInner}</g>`;
     allPaths += `<g>${tileInner}</g>`;
     allPaths += `<g transform="translate(2048,0)">${tileInner}</g>`;
     return allPaths;
 }
-
-// RESTORED: "Proper" Ring Generation Logic (SVG Circles)
-function generateRingsSVG(rng, data) {
-    let svgContent = '';
-    const cx = 512, cy = 512; // Base SVG size 1024x1024
-
-    // Chance for "Flat Line" rings (Sci-fi style)
-    if (rng() > 0.8) {
-        const ringBase = data.solid.color;
-        for(let i=0; i<8; i++) {
-            const r = 250 + i * 20; 
-            const width = rng()*8+2; 
-            const opacity = rng() * 0.3 + 0.1;
-            const color = artColor(ringBase, (i%2===0?20:-20), -10, 0);
-            svgContent += `<circle cx="${cx}" cy="${cy}" r="${r}" stroke="${color}" fill="none" stroke-width="${width}" opacity="${opacity}" />`;
-        }
-        return svgContent;
-    }
-
-    // Standard Planetary Rings (Bands)
-    const solidColor = data.solid.color; 
-    const iceColor = data.liquid.frozenColor || "#e0f2fe";
-    const palette = [solidColor, iceColor, artColor(solidColor, 15, -10), artColor(iceColor, -15, 5)];
-    
-    // Define Bands
-    const bands = [
-        { name: "Inner", start: 200, end: 320, density: 0.8, count: 60 },
-        { name: "Main",  start: 330, end: 450, density: 0.5, count: 60 },
-        { name: "Outer", start: 455, end: 465, density: 0.3, count: 10 }
-    ];
-
-    bands.forEach(band => {
-        for (let i = 0; i < band.count; i++) {
-            const progress = rng();
-            const radius = band.start + progress * (band.end - band.start);
-            // Wave opacity pattern
-            const wave = Math.sin(progress * Math.PI * (10 + rng() * 10));
-            const finalOpacity = (band.density * 0.3) * (0.5 + rng() * 0.5) + wave * 0.1;
-            
-            if (finalOpacity < 0.04) continue;
-            
-            const color = palette[Math.floor(rng() * palette.length)];
-            const width = 1 + rng() * 4;
-            
-            svgContent += `<circle cx="${cx}" cy="${cy}" r="${radius}" stroke="${color}" fill="none" stroke-width="${width}" stroke-opacity="${finalOpacity}" />`;
-        }
-    });
-    return svgContent;
-}
-
-// REPURPOSED: Creates a static "Glow" texture behind the planet (formerly ring particles)
-function createGlowTexture(rng, data) {
-    const c = document.createElement('canvas');
-    c.width = 1024; c.height = 1024;
-    const ctx = c.getContext('2d');
-    const cx = 512, cy = 512;
-    
-    // Draw dusty halo
-    const bands = Math.floor(rng() * 3) + 2;
-    const solidColor = data.solid.color;
-    const iceColor = data.liquid.frozenColor;
-    
-    for(let b=0; b<bands; b++) {
-        const rStart = 300 + (rng() * 100);
-        const rEnd = rStart + 150;
-        const col = rng() > 0.5 ? solidColor : iceColor;
-        
-        // Thousands of tiny dots for dust look
-        const particles = 2000;
-        ctx.fillStyle = col;
-        
-        for(let p=0; p<particles; p++) {
-            const r = rStart + Math.random() * (rEnd - rStart);
-            const theta = Math.random() * Math.PI * 2;
-            const size = Math.random() * 2 + 0.5;
-            const alpha = Math.random() * 0.3 + 0.05;
-            
-            ctx.globalAlpha = alpha;
-            ctx.beginPath();
-            ctx.arc(cx + Math.cos(theta)*r, cy + Math.sin(theta)*r, size, 0, Math.PI*2);
-            ctx.fill();
-        }
-        
-        // Faint wash
-        ctx.globalAlpha = 0.03;
-        ctx.strokeStyle = col;
-        ctx.lineWidth = 40;
-        ctx.beginPath();
-        ctx.arc(cx, cy, (rStart+rEnd)/2, 0, Math.PI*2);
-        ctx.stroke();
-    }
-    
-    const tex = new THREE.CanvasTexture(c);
-    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    return tex;
-}
-
 
 function generatePlanetData(rng) {
     let baseTemp = Math.floor(rng() * 450 - 150);
@@ -1047,7 +919,6 @@ async function fullRebuild() {
     dom.bIce.innerHTML = '';
     dom.bBio.innerHTML = '';
     dom.bClouds.innerHTML = '';
-    dom.bRings.innerHTML = '';
     dom.defs.querySelectorAll('.dynamic-def').forEach(el => el.remove());
 
     const rng = createRNG(state.seed);
@@ -1069,12 +940,15 @@ async function fullRebuild() {
     atmosMesh.visible = data.atmosDensity > 0.05;
 
     // 1. GENERATE NOISE PATTERN (TILED 1024x1024)
+    // We generate one noise map and reuse it for EVERYTHING.
     const noiseID = `noise-${state.seed}`;
     const noiseFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     noiseFilter.setAttribute("id", noiseID);
     noiseFilter.setAttribute("x", "0%"); noiseFilter.setAttribute("y", "0%"); 
     noiseFilter.setAttribute("width", "100%"); noiseFilter.setAttribute("height", "100%");
     noiseFilter.classList.add('dynamic-def');
+    
+    // Using feColorMatrix to ensure grayscale contrast is standardized
     noiseFilter.innerHTML = `
         <feTurbulence type="fractalNoise" baseFrequency="${data.baseFreq}" numOctaves="6" seed="${Math.floor(rng()*100)}" stitchTiles="stitch" result="turb"/>
         <feColorMatrix type="saturate" values="0" in="turb" result="gray"/>
@@ -1096,56 +970,45 @@ async function fullRebuild() {
     pattern.innerHTML = `<rect width="1024" height="1024" filter="url(#${noiseID})"/>`;
     dom.defs.appendChild(pattern);
 
-    // 2. TERRAIN LAYERS (DEEP ITERATION)
-    // We create a mask for every color in the palette
-    state.layerThresholds = [];
-    dom.bBg.setAttribute("fill", palette[0]);
+    // 2. TERRAIN LAYERS - OPTIMIZED: COLOR MAPPING
+    // Instead of 18 masks (slow!), we use one feComponentTransfer to map luminance to palette colors.
     
-    // Spread thresholds across 0.0 to 1.0 based on palette size
-    let stops = [0];
-    let current = 0;
-    const gap = 0.95 / (palette.length - 1);
-    
-    palette.slice(1).forEach((color, i) => {
-        const level = (i + 1) * gap;
-        const maskID = `mask-layer-${i}-${state.seed}`;
-        const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
-        mask.setAttribute("id", maskID);
-        mask.classList.add('dynamic-def');
-        
-        // Threshold Filter
-        const threshID = `thresh-layer-${i}`;
-        const threshFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
-        threshFilter.setAttribute("id", threshID);
-        threshFilter.classList.add('dynamic-def');
-        
-        // Store for soft updates
-        state.layerThresholds.push(level);
-        
-        const slope = 80; // Hard edge
-        const intercept = -(level * slope);
-        threshFilter.innerHTML = `<feComponentTransfer><feFuncR type="linear" slope="${slope}" intercept="${intercept}" /><feFuncG type="linear" slope="${slope}" intercept="${intercept}" /><feFuncB type="linear" slope="${slope}" intercept="${intercept}" /></feComponentTransfer>`;
-        dom.defs.appendChild(threshFilter);
-
-        const noiseRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        noiseRect.setAttribute("width","2048"); noiseRect.setAttribute("height","1024");
-        noiseRect.setAttribute("fill", `url(#${noisePatternId})`);
-        noiseRect.setAttribute("filter", `url(#${threshID})`);
-        mask.appendChild(noiseRect);
-        dom.defs.appendChild(mask);
-
-        const layerRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        layerRect.setAttribute("width","2048"); layerRect.setAttribute("height","1024");
-        layerRect.setAttribute("fill", color);
-        layerRect.setAttribute("mask", `url(#${maskID})`);
-        dom.bTerrain.appendChild(layerRect);
+    // Prepare table values for R, G, B
+    let rVals = [], gVals = [], bVals = [];
+    palette.forEach(hex => {
+        const rgb = hexToRgbUnit(hex);
+        rVals.push(rgb.r); gVals.push(rgb.g); bVals.push(rgb.b);
     });
+    
+    const mapFilterId = `terrain-map-${state.seed}`;
+    const mapFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
+    mapFilter.setAttribute("id", mapFilterId);
+    mapFilter.classList.add('dynamic-def');
+    
+    // 'discrete' type creates hard edges between colors, mimicking the "threshold" look exactly without the cost.
+    mapFilter.innerHTML = `
+        <feComponentTransfer>
+            <feFuncR type="discrete" tableValues="${rVals.join(' ')}"/>
+            <feFuncG type="discrete" tableValues="${gVals.join(' ')}"/>
+            <feFuncB type="discrete" tableValues="${bVals.join(' ')}"/>
+        </feComponentTransfer>
+    `;
+    dom.defs.appendChild(mapFilter);
+
+    // One single rect for the terrain
+    const terrainRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    terrainRect.setAttribute("width", "2048"); terrainRect.setAttribute("height", "1024");
+    terrainRect.setAttribute("fill", `url(#${noisePatternId})`);
+    terrainRect.setAttribute("filter", `url(#${mapFilterId})`);
+    dom.bTerrain.appendChild(terrainRect);
+
 
     // 3. LIQUID / ICE MASKS
     const lMaskId = `filter-mask-liq-${state.seed}`;
     const lFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     lFilter.setAttribute("id", lMaskId);
     lFilter.classList.add('dynamic-def');
+    // Initial slope/intercept will be set by softUpdate immediately after
     lFilter.innerHTML = `<feComponentTransfer><feFuncR type="linear" slope="1" intercept="0" /><feFuncG type="linear" slope="1" intercept="0" /><feFuncB type="linear" slope="1" intercept="0" /></feComponentTransfer>`;
     dom.defs.appendChild(lFilter);
 
@@ -1200,27 +1063,6 @@ async function fullRebuild() {
         dom.bClouds.innerHTML = cloudSVG;
     }
 
-    // 5. RINGS (Restored "Proper" SVG Rings)
-    if (data.rings) {
-        const ringSVG = generateRingsSVG(rng, data);
-        dom.bRings.innerHTML = ringSVG;
-        
-        // Bake the ring texture
-        const ringTex = await bakeSVGToTexture(dom.svgRings);
-        ringMesh.material.map = ringTex;
-        ringMesh.material.color.set(0xffffff);
-        ringMesh.material.needsUpdate = true;
-        ringMesh.visible = true;
-    } else {
-        ringMesh.visible = false;
-    }
-
-    // 6. ATMOSPHERE HALO/GLOW (Repurposed old ring particles)
-    const glowTex = createGlowTexture(rng, data);
-    glowMesh.material.map = glowTex;
-    glowMesh.material.color.set(data.cloudHex);
-    glowMesh.material.needsUpdate = true;
-
     // UPDATE THREE.JS TEXTURES
     softUpdate(true); // Sets thresholds based on water level
     
@@ -1242,7 +1084,6 @@ async function fullRebuild() {
     // Reset Tilt
     planetMesh.rotation.z = 0;
     cloudMesh.rotation.z = 0;
-    ringMesh.rotation.x = -Math.PI / 2;
 
     dom.btnGen.disabled = false;
     dom.btnGen.innerText = "Re-Generate";
@@ -1261,17 +1102,6 @@ function softUpdate(isGenerating = false) {
             el.setAttribute('intercept', intercept);
         });
     };
-
-    // Update Terrain Layers
-    // We shift the thresholds slightly based on water level to simulate rising sea "covering" land
-    if(state.layerThresholds.length > 0) {
-         state.layerThresholds.forEach((base, i) => {
-             // If water rises, land thresholds effectively shift
-             const slope = 80;
-             const intercept = -(base * slope);
-             updateFilter(`thresh-layer-${i}`, slope, intercept);
-         });
-    }
 
     // Update Liquid Mask
     const lMaskId = `filter-mask-liq-${state.seed}`;
@@ -1356,18 +1186,6 @@ function animate() {
 
 /* --- INITIALIZATION --- */
 window.onload = () => {
-    // Stars
-    const bg = document.getElementById('starfield');
-    for(let i=0; i<150; i++) { 
-        const s = document.createElement('div');
-        s.className = 'star';
-        s.style.top = Math.random()*100+'%'; s.style.left = Math.random()*100+'%';
-        const size = Math.random() > 0.9 ? 2.5 : 1.5;
-        s.style.width = size+'px'; s.style.height = size+'px';
-        s.style.animationDelay = Math.random()*5+'s';
-        bg.appendChild(s);
-    }
-
     // Handlers
     const triggerRebuild = () => {
         state.seed = dom.seedInput.value.toUpperCase();

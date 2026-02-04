@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SB PLANETGEN V12 - HIGH FIDELITY</title>
+    <title>SB PLANETGEN V12.5 - HYBRID</title>
     <style>
         /* --- CORE VISUALS --- */
         :root {
@@ -142,13 +142,17 @@
         .data-lbl { color: var(--c-text-dim); }
         .data-val { color: var(--c-text); font-weight: bold; text-align: right;}
         
-        .tag { font-size: 0.7em; padding: 2px 4px; border-radius: 3px; margin-left: 5px; opacity: 0.9; }
+        .tag { font-size: 0.7em; padding: 2px 4px; border-radius: 3px; margin-left: 5px; opacity: 0.9; display: inline-block; vertical-align: middle; }
         .tag-c { background: #064e3b; color: #6ee7b7; border: 1px solid #059669; }
         .tag-si { background: #312e81; color: #a5b4fc; border: 1px solid #4f46e5; }
         .tag-fe { background: #451a03; color: #fdba74; border: 1px solid #c2410c; }
         .tag-x { background: #4c1d95; color: #e9d5ff; border: 1px solid #8b5cf6; }
         .tag-bio { background: #831843; color: #f9a8d4; border: 1px solid #db2777; }
         .tag-none { background: #27272a; color: #a1a1aa; border: 1px solid #3f3f46; }
+
+        .temp-range { font-size: 0.8em; opacity: 0.7; margin-left: 5px; }
+        .t-min { color: #60a5fa; }
+        .t-max { color: #f87171; }
 
         .tag-life { color: #10b981; text-shadow: 0 0 10px rgba(16,185,129,0.3); font-weight: bold; }
         .tag-dead { color: var(--c-text-dim); opacity: 0.5; }
@@ -224,6 +228,7 @@
     </div>
 
     <div id="texture-baker-container">
+        <!-- Main Surface Baker -->
         <svg id="surface-baker" width="2048" height="1024" viewBox="0 0 2048 1024" xmlns="http://www.w3.org/2000/svg">
             <defs>
                 <filter id="geo-blur"><feGaussianBlur stdDeviation="25" /></filter>
@@ -241,6 +246,7 @@
             <g id="bake-group-bio"></g>
         </svg>
 
+        <!-- Cloud Baker -->
         <svg id="cloud-baker" width="2048" height="1024" viewBox="0 0 2048 1024" xmlns="http://www.w3.org/2000/svg">
             <defs>
                  <filter id="cloud-fluff">
@@ -252,11 +258,16 @@
             </defs>
             <g id="bake-group-clouds" filter="url(#cloud-fluff)"></g>
         </svg>
+
+        <!-- Ring Baker -->
+        <svg id="ring-baker" width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+            <g id="bake-group-rings"></g>
+        </svg>
     </div>
 
     <div class="deck">
         <div class="deck-header">
-            <h1>SB PLANETGEN <span class="version">V12</span></h1>
+            <h1>SB PLANETGEN <span class="version">V12.5</span></h1>
             <div class="seed-row">
                 <input type="text" id="seed-input" value="TERRA-PRIME">
                 <button class="btn-icon" id="btn-rnd" title="Randomize">🎲</button>
@@ -328,7 +339,7 @@
 import * as THREE from 'https://esm.sh/three';
 
 /**
- * SB PLANETGEN V12 - HIGH FIDELITY RECOVERY
+ * SB PLANETGEN V12.5 - HYBRID HIGH FIDELITY
  */
 
 /* --- DATA CONSTANTS --- */
@@ -510,6 +521,17 @@ function createRNG(str) {
     };
 }
 
+function getTagHtml(tag) {
+    const colorMap = {
+        'C': 'tag-c', 'H2O': 'tag-si', 'Bio': 'tag-bio',
+        'Fe': 'tag-fe', 'Au': 'tag-fe', 'Cu': 'tag-fe', 'Ag': 'tag-fe', 'Pb': 'tag-fe', 'Sn': 'tag-fe', 'Al': 'tag-fe', 'Ti': 'tag-fe', 'W': 'tag-fe', 'Co': 'tag-fe',
+        'Si': 'tag-fe', 'S': 'tag-fe', 'Na': 'tag-fe',
+        'H': 'tag-si', 'He': 'tag-si', 'O': 'tag-si', 'N': 'tag-si', 'Ar': 'tag-si', 'Cl': 'tag-si', 'Br': 'tag-si', 'D2O': 'tag-si',
+        'U': 'tag-x', 'Hg': 'tag-x', 'Ga': 'tag-x', 'X': 'tag-x'
+    };
+    return `<span class="tag ${colorMap[tag] || 'tag-none'}">${tag}</span>`;
+}
+
 /* --- STATE MANAGEMENT --- */
 const state = {
     seed: 'INIT',
@@ -535,10 +557,12 @@ const dom = {
     bIce: document.getElementById('bake-group-ice'),
     bBio: document.getElementById('bake-group-bio'),
     bClouds: document.getElementById('bake-group-clouds'),
+    bRings: document.getElementById('bake-group-rings'),
     bBg: document.getElementById('bake-bg'),
     // SVGs
     svgSurface: document.getElementById('surface-baker'),
     svgClouds: document.getElementById('cloud-baker'),
+    svgRings: document.getElementById('ring-baker'),
     // Inputs
     seedInput: document.getElementById('seed-input'),
     btnRnd: document.getElementById('btn-rnd'),
@@ -569,9 +593,19 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
 camera.position.z = 3.8;
 
-// Planet Group (Standard Rotation)
+// Planet Group (Rotates)
 const planetGroup = new THREE.Group();
 scene.add(planetGroup);
+
+// Glow Mesh (Locked, Static background)
+// Repurposed from old ring system to create a soft halo behind the planet
+const glowGeo = new THREE.PlaneGeometry(3.5, 3.5);
+const glowMat = new THREE.MeshBasicMaterial({ 
+    transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending 
+});
+const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+glowMesh.position.z = -1; // Behind planet
+scene.add(glowMesh);
 
 // Sphere (Surface)
 const geometry = new THREE.SphereGeometry(1, 128, 128); // Higher poly for smoothness
@@ -624,10 +658,10 @@ const atmosMat = new THREE.ShaderMaterial({
 const atmosMesh = new THREE.Mesh(atmosGeo, atmosMat);
 planetGroup.add(atmosMesh);
 
-// Rings (High Res Plane)
-const ringGeo = new THREE.PlaneGeometry(3.5, 3.5);
-const ringMat = new THREE.MeshBasicMaterial({ 
-    side: THREE.DoubleSide, transparent: true, opacity: 0.9, map: null
+// Rings (High Res Plane) - The "Proper" flat rings
+const ringGeo = new THREE.PlaneGeometry(3.0, 3.0);
+const ringMat = new THREE.MeshStandardMaterial({ 
+    side: THREE.DoubleSide, transparent: true, opacity: 0.95, roughness: 0.8
 });
 const ringMesh = new THREE.Mesh(ringGeo, ringMat);
 ringMesh.rotation.x = -Math.PI / 2;
@@ -694,9 +728,11 @@ async function bakeSVGToTexture(svgElement) {
     });
 }
 
-// Logic for Cloud Spines (Restored)
+// RESTORED: "Proper" Cloud Generation Logic (Spines + Stacks)
 function generateCloudsSVG(rng, data) {
     const R = 640; 
+    
+    // Helper: Create a curved path segment
     const generateCloudSpine = (yBase, width, xOffset) => {
         const points = [];
         const steps = 60;
@@ -711,11 +747,12 @@ function generateCloudsSVG(rng, data) {
             yDrift += (rng() - 0.5) * 1.0;
             yDrift *= 0.95;
             y += yDrift;
-            points.push({ x: 1024 + xRel * 1.5, y: 512 + y }); // Scale to 2048x1024
+            points.push({ x: 1024 + xRel * 1.5, y: 512 + y }); 
         }
         return points;
     };
 
+    // Helper: Expand spine into a bubbly shape
     const generateCloudShapeFromSpine = (spinePoints, options = {}) => {
         const { baseThickness=30, thicknessVariance=10, edgeNoise=10, taperPower=0.5 } = options;
         if (spinePoints.length < 3) return "";
@@ -746,6 +783,44 @@ function generateCloudsSVG(rng, data) {
         return d;
     };
 
+    // Helper: Create stack of cloud shapes (The "Proper" Design)
+    const generateCloudSystem = (driverSpine, baseColor, yBase) => {
+        const systemElements = [];
+        const stackingDirection = yBase < 0 ? -1 : 1; 
+        const createStack = (spine, layers, scale) => {
+            const elements = [];
+            for (let i = 0; i <= layers; i++) {
+                const lengthRatio = 1.0 - (i * 0.08); 
+                const subLength = Math.floor(spine.length * Math.max(0.4, lengthRatio));
+                const slack = spine.length - subLength;
+                const startIdx = Math.floor(rng() * (slack * 0.8) + (slack * 0.1));
+                const baseSubSpine = spine.slice(startIdx, startIdx + subLength);
+                const offsetDist = i * 14 * scale * stackingDirection; 
+                const disjointX = (rng() - 0.5) * 20 * scale; 
+                const offsetSubSpine = baseSubSpine.map((p, j, arr) => {
+                    const p_next = arr[Math.min(arr.length-1, j+1)];
+                    const p_prev = arr[Math.max(0, j-1)];
+                    const dx = p_next.x - p_prev.x, dy = p_next.y - p_prev.y;
+                    let nx = -dy, ny = dx;
+                    const len = Math.sqrt(nx*nx+ny*ny);
+                    if (len > 0) { nx /= len; ny /= len; }
+                    return { x: p.x + (nx * offsetDist) + disjointX, y: p.y + (ny * offsetDist) };
+                });
+                const subPathData = generateCloudShapeFromSpine(offsetSubSpine, {
+                    baseThickness: (35 - (i * 2)) * scale, edgeNoise: (12 + i) * scale, taperPower: 0.5
+                });
+                if (subPathData) {
+                    const el = `<path d="${subPathData}" fill="${artColor(baseColor, 40 - (i * 10), -5)}" fill-opacity="0.6"/>`;
+                    elements.push(el);
+                }
+            }
+            return elements;
+        };
+        const mainLayers = Math.floor(rng() * 4) + 4; 
+        systemElements.push(...createStack(driverSpine, mainLayers, 1.0));
+        return systemElements;
+    };
+
     let allPaths = "";
     const clusterCount = Math.floor(rng() * 3) + 3;
     const range = 1.85; 
@@ -765,22 +840,112 @@ function generateCloudsSVG(rng, data) {
         const col = artColor(data.cloudHex, dist * -15, dist * -5);
         
         const spine = generateCloudSpine(yBase, width, xOffset);
-        // Draw layers
-        for(let l=0; l<3; l++) {
-            const path = generateCloudShapeFromSpine(spine, {
-                baseThickness: (50 - l*10),
-                edgeNoise: 15,
-                taperPower: 0.4
-            });
-            tileInner += `<path d="${path}" fill="${col}" fill-opacity="${0.3 + l*0.1}" />`;
-        }
+        const els = generateCloudSystem(spine, col, yBase);
+        tileInner += els.join('');
     }
-    // Duplicate for wrapping (simple approach)
+    // Duplicate for wrapping
     allPaths += `<g transform="translate(-2048,0)">${tileInner}</g>`;
     allPaths += `<g>${tileInner}</g>`;
     allPaths += `<g transform="translate(2048,0)">${tileInner}</g>`;
     return allPaths;
 }
+
+// RESTORED: "Proper" Ring Generation Logic (SVG Circles)
+function generateRingsSVG(rng, data) {
+    let svgContent = '';
+    const cx = 512, cy = 512; // Base SVG size 1024x1024
+
+    // Chance for "Flat Line" rings (Sci-fi style)
+    if (rng() > 0.8) {
+        const ringBase = data.solid.color;
+        for(let i=0; i<8; i++) {
+            const r = 250 + i * 20; 
+            const width = rng()*8+2; 
+            const opacity = rng() * 0.3 + 0.1;
+            const color = artColor(ringBase, (i%2===0?20:-20), -10, 0);
+            svgContent += `<circle cx="${cx}" cy="${cy}" r="${r}" stroke="${color}" fill="none" stroke-width="${width}" opacity="${opacity}" />`;
+        }
+        return svgContent;
+    }
+
+    // Standard Planetary Rings (Bands)
+    const solidColor = data.solid.color; 
+    const iceColor = data.liquid.frozenColor || "#e0f2fe";
+    const palette = [solidColor, iceColor, artColor(solidColor, 15, -10), artColor(iceColor, -15, 5)];
+    
+    // Define Bands
+    const bands = [
+        { name: "Inner", start: 200, end: 320, density: 0.8, count: 60 },
+        { name: "Main",  start: 330, end: 450, density: 0.5, count: 60 },
+        { name: "Outer", start: 455, end: 465, density: 0.3, count: 10 }
+    ];
+
+    bands.forEach(band => {
+        for (let i = 0; i < band.count; i++) {
+            const progress = rng();
+            const radius = band.start + progress * (band.end - band.start);
+            // Wave opacity pattern
+            const wave = Math.sin(progress * Math.PI * (10 + rng() * 10));
+            const finalOpacity = (band.density * 0.3) * (0.5 + rng() * 0.5) + wave * 0.1;
+            
+            if (finalOpacity < 0.04) continue;
+            
+            const color = palette[Math.floor(rng() * palette.length)];
+            const width = 1 + rng() * 4;
+            
+            svgContent += `<circle cx="${cx}" cy="${cy}" r="${radius}" stroke="${color}" fill="none" stroke-width="${width}" stroke-opacity="${finalOpacity}" />`;
+        }
+    });
+    return svgContent;
+}
+
+// REPURPOSED: Creates a static "Glow" texture behind the planet (formerly ring particles)
+function createGlowTexture(rng, data) {
+    const c = document.createElement('canvas');
+    c.width = 1024; c.height = 1024;
+    const ctx = c.getContext('2d');
+    const cx = 512, cy = 512;
+    
+    // Draw dusty halo
+    const bands = Math.floor(rng() * 3) + 2;
+    const solidColor = data.solid.color;
+    const iceColor = data.liquid.frozenColor;
+    
+    for(let b=0; b<bands; b++) {
+        const rStart = 300 + (rng() * 100);
+        const rEnd = rStart + 150;
+        const col = rng() > 0.5 ? solidColor : iceColor;
+        
+        // Thousands of tiny dots for dust look
+        const particles = 2000;
+        ctx.fillStyle = col;
+        
+        for(let p=0; p<particles; p++) {
+            const r = rStart + Math.random() * (rEnd - rStart);
+            const theta = Math.random() * Math.PI * 2;
+            const size = Math.random() * 2 + 0.5;
+            const alpha = Math.random() * 0.3 + 0.05;
+            
+            ctx.globalAlpha = alpha;
+            ctx.beginPath();
+            ctx.arc(cx + Math.cos(theta)*r, cy + Math.sin(theta)*r, size, 0, Math.PI*2);
+            ctx.fill();
+        }
+        
+        // Faint wash
+        ctx.globalAlpha = 0.03;
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 40;
+        ctx.beginPath();
+        ctx.arc(cx, cy, (rStart+rEnd)/2, 0, Math.PI*2);
+        ctx.stroke();
+    }
+    
+    const tex = new THREE.CanvasTexture(c);
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return tex;
+}
+
 
 function generatePlanetData(rng) {
     let baseTemp = Math.floor(rng() * 450 - 150);
@@ -882,6 +1047,7 @@ async function fullRebuild() {
     dom.bIce.innerHTML = '';
     dom.bBio.innerHTML = '';
     dom.bClouds.innerHTML = '';
+    dom.bRings.innerHTML = '';
     dom.defs.querySelectorAll('.dynamic-def').forEach(el => el.remove());
 
     const rng = createRNG(state.seed);
@@ -889,10 +1055,10 @@ async function fullRebuild() {
     const data = state.data;
     const palette = generateDeepPalette(data.solid.color); // 18 colors!
 
-    // Update Text UI
-    dom.valTemp.innerHTML = `${data.baseTemp}°C`;
-    dom.valLiquid.innerHTML = data.oceanName;
-    dom.valSolid.innerHTML = data.solidName;
+    // Update Text UI with Ranges and Tags
+    dom.valTemp.innerHTML = `${data.baseTemp}°C <span class="temp-range">(<span class="t-min">${data.minT}°</span> / <span class="t-max">${data.maxT}°</span>)</span>`;
+    dom.valLiquid.innerHTML = data.oceanName + getTagHtml(data.liquid.tag);
+    dom.valSolid.innerHTML = data.solidName + getTagHtml(data.solid.tag);
     dom.valAtmos.innerText = data.atmosName;
     dom.valLife.innerHTML = data.hasLife ? data.lifeType : "STERILE";
     dom.valLife.className = data.hasLife ? "data-val tag-life" : "data-val tag-dead";
@@ -903,7 +1069,6 @@ async function fullRebuild() {
     atmosMesh.visible = data.atmosDensity > 0.05;
 
     // 1. GENERATE NOISE PATTERN (TILED 1024x1024)
-    // Complex Noise Logic Restored
     const noiseID = `noise-${state.seed}`;
     const noiseFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     noiseFilter.setAttribute("id", noiseID);
@@ -1013,8 +1178,7 @@ async function fullRebuild() {
     zoneGrad.innerHTML = `<stop offset="0%" stop-color="#fff"/><stop offset="${fTop}%" stop-color="#fff"/><stop offset="${fTop}%" stop-color="#000"/><stop offset="${fBot}%" stop-color="#000"/><stop offset="${fBot}%" stop-color="#fff"/><stop offset="100%" stop-color="#fff"/>`;
     dom.defs.appendChild(zoneGrad);
 
-    // Ice Mask (Combine Liquid Mask + Zone Mask)
-    // Simplified: Just draw ice over liquid using a mask wrapper
+    // Ice Mask
     const iceZoneMaskId = `mask-ice-zone-${state.seed}`;
     const izMask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
     izMask.setAttribute("id", iceZoneMaskId);
@@ -1034,61 +1198,28 @@ async function fullRebuild() {
     if (state.cloudsEnabled && data.atmosDensity > 0.05) {
         const cloudSVG = generateCloudsSVG(rng, data);
         dom.bClouds.innerHTML = cloudSVG;
-        
-        // Add color filter to group
-        // Not straightforward in simple SVG string concat, so we baked col into paths
     }
 
-    // 5. RINGS (Canvas Particle System)
+    // 5. RINGS (Restored "Proper" SVG Rings)
     if (data.rings) {
-        const c = document.createElement('canvas');
-        c.width = 2048; c.height = 2048;
-        const ctx = c.getContext('2d');
-        const cx = 1024, cy = 1024;
+        const ringSVG = generateRingsSVG(rng, data);
+        dom.bRings.innerHTML = ringSVG;
         
-        const bands = Math.floor(rng() * 5) + 3;
-        const solidColor = data.solid.color;
-        const iceColor = data.liquid.frozenColor;
-        
-        for(let b=0; b<bands; b++) {
-            const rStart = 400 + (rng() * 500);
-            const rEnd = rStart + (rng() * 150) + 20;
-            const density = rng();
-            const col = rng() > 0.5 ? solidColor : iceColor;
-            
-            // Draw thousands of "particles" (dots/arcs)
-            const particles = 2000 * density;
-            ctx.strokeStyle = col;
-            ctx.fillStyle = col;
-            
-            for(let p=0; p<particles; p++) {
-                const r = rStart + Math.random() * (rEnd - rStart);
-                const theta = Math.random() * Math.PI * 2;
-                const size = Math.random() * 2 + 0.5;
-                const alpha = Math.random() * 0.5 + 0.1;
-                
-                ctx.globalAlpha = alpha;
-                ctx.beginPath();
-                ctx.arc(cx + Math.cos(theta)*r, cy + Math.sin(theta)*r, size, 0, Math.PI*2);
-                ctx.fill();
-            }
-            
-            // Add faint dust background for band
-            ctx.globalAlpha = 0.05;
-            ctx.beginPath();
-            ctx.arc(cx, cy, rEnd, 0, Math.PI*2);
-            ctx.arc(cx, cy, rStart, 0, Math.PI*2, true); // Hole
-            ctx.fill();
-        }
-
-        const ringTex = new THREE.CanvasTexture(c);
-        ringTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        // Bake the ring texture
+        const ringTex = await bakeSVGToTexture(dom.svgRings);
         ringMesh.material.map = ringTex;
+        ringMesh.material.color.set(0xffffff);
         ringMesh.material.needsUpdate = true;
         ringMesh.visible = true;
     } else {
         ringMesh.visible = false;
     }
+
+    // 6. ATMOSPHERE HALO/GLOW (Repurposed old ring particles)
+    const glowTex = createGlowTexture(rng, data);
+    glowMesh.material.map = glowTex;
+    glowMesh.material.color.set(data.cloudHex);
+    glowMesh.material.needsUpdate = true;
 
     // UPDATE THREE.JS TEXTURES
     softUpdate(true); // Sets thresholds based on water level
@@ -1108,7 +1239,7 @@ async function fullRebuild() {
     }
     cloudMesh.material.needsUpdate = true;
 
-    // Remove Tilt
+    // Reset Tilt
     planetMesh.rotation.z = 0;
     cloudMesh.rotation.z = 0;
     ringMesh.rotation.x = -Math.PI / 2;
@@ -1145,7 +1276,6 @@ function softUpdate(isGenerating = false) {
     // Update Liquid Mask
     const lMaskId = `filter-mask-liq-${state.seed}`;
     // Liquid noise is 0..1. High water factor means we accept more noise values.
-    // Standard inversion logic:
     const slope = -50;
     const intercept = (waterFactor * 50) + 0.5; 
     updateFilter(lMaskId, slope, intercept);
@@ -1219,9 +1349,6 @@ function animate() {
         
         // Cloud Parallax (Local Rotation)
         cloudMesh.rotation.y += 0.0003; 
-        
-        // Ring Spin (Local)
-        if(ringMesh.visible) ringMesh.rotation.z -= 0.0005; 
     }
 
     renderer.render(scene, camera);
@@ -1231,7 +1358,7 @@ function animate() {
 window.onload = () => {
     // Stars
     const bg = document.getElementById('starfield');
-    for(let i=0; i<150; i++) { // More stars
+    for(let i=0; i<150; i++) { 
         const s = document.createElement('div');
         s.className = 'star';
         s.style.top = Math.random()*100+'%'; s.style.left = Math.random()*100+'%';

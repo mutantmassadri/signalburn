@@ -1,11 +1,9 @@
-<!-- START OF FILE index.html -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SB PLANETGEN V12.5 - TURBO</title>
+    <title>SB PLANETGEN V13 - IMPACT UPDATE (FIXED)</title>
     <style>
         /* --- CORE VISUALS --- */
         :root {
@@ -210,6 +208,15 @@
         }
 
     </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/"
+  }
+}
+</script>
 </head>
 <body>
 
@@ -218,9 +225,9 @@
     </div>
 
     <div id="texture-baker-container">
-        <!-- Main Surface Baker -->
+        <!-- SURFACE BAKER (Color) -->
         <svg id="surface-baker" width="2048" height="1024" viewBox="0 0 2048 1024" xmlns="http://www.w3.org/2000/svg">
-            <defs>
+            <defs id="defs-surface">
                 <filter id="geo-blur"><feGaussianBlur stdDeviation="25" /></filter>
                 <filter id="liquid-blur"><feGaussianBlur stdDeviation="1" /></filter>
                 <filter id="zone-warp">
@@ -234,27 +241,29 @@
             <g id="bake-group-liquid"></g>
             <g id="bake-group-ice"></g>
             <g id="bake-group-bio"></g>
+            <g id="bake-group-crater-overlays"></g> <!-- OVERLAY FOR DEPTH -->
         </svg>
-
-        <!-- Cloud Baker -->
-        <svg id="cloud-baker" width="2048" height="1024" viewBox="0 0 2048 1024" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-                 <filter id="cloud-fluff">
-                    <feGaussianBlur stdDeviation="3" />
-                    <feComponentTransfer>
-                         <feFuncA type="linear" slope="2" intercept="0"/> 
-                    </feComponentTransfer>
+        
+        <!-- HEIGHT BAKER (Displacement) - Needs its own defs for blob isolation -->
+        <svg id="height-baker" width="2048" height="1024" viewBox="0 0 2048 1024" xmlns="http://www.w3.org/2000/svg">
+            <defs id="defs-height">
+                <!-- Duplicated Filters for Height Map Isolation -->
+                <filter id="zone-warp-h">
+                     <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="4" seed="123" result="turb"/>
+                     <feDisplacementMap in="SourceGraphic" in2="turb" scale="60" xChannelSelector="R" yChannelSelector="G"/>
+                     <feGaussianBlur stdDeviation="10" />
                 </filter>
             </defs>
-            <g id="bake-group-clouds" filter="url(#cloud-fluff)"></g>
+            <rect width="2048" height="1024" fill="#000" />
+            <g id="bake-group-height"></g>
         </svg>
     </div>
 
     <div class="deck">
         <div class="deck-header">
-            <h1>SB PLANETGEN <span class="version">V12.5 T</span></h1>
+            <h1>SB PLANETGEN <span class="version">V14 CRATER</span></h1>
             <div class="seed-row">
-                <input type="text" id="seed-input" value="TERRA-PRIME">
+                <input type="text" id="seed-input" value="LUNA-CRATER">
                 <button class="btn-icon" id="btn-rnd" title="Randomize">🎲</button>
             </div>
         </div>
@@ -324,10 +333,12 @@
 import * as THREE from 'https://esm.sh/three';
 
 /**
- * SB PLANETGEN V12.5 TURBO - HYBRID HIGH FIDELITY OPTIMIZED
+ * SB PLANETGEN V14 - COMPLEX CRATERS UPDATE
+ * Amorphous crater shapes with procedural filtering
  */
 
 /* --- DATA CONSTANTS --- */
+const CRATER_RIDGE_INTENSITY = 0.1; 
 const LIQUIDS = [
     { name: "Water",           color: "#3b82f6", freeze: 0,    boil: 100,  tag: "H2O", cloud: "#ffffff", frozenColor: "#bfdbfe", type: "standard", gas: "Oxygen" },
     { name: "Salt Water",      color: "#1d4ed8", freeze: -2,   boil: 102,  tag: "H2O", cloud: "#f1f5f9", frozenColor: "#a5b4fc", type: "standard", gas: "Oxygen" },
@@ -533,26 +544,37 @@ const state = {
     shadow: 50,
     cloudsEnabled: true,
     autoRotate: true,
+    // Generated palette storage
+    currentPalette: [], 
     // 3D Physics
     rotationSpeed: 0.1,
     isDragging: false,
-    lastX: 0,
-    velocity: 0.5
+    dragStartX: 0,
+    dragStartRotation: 0,
+    velocity: 0.5,
+    targetRotation: 0,
+    
+    // Inertia Tracking
+    lastMouseX: 0,
+    lastMouseTime: 0,
+    dragVelocity: 0 // Velocity calculated during drag
 };
 
 /* --- DOM REFERENCES --- */
 const dom = {
-    defs: document.querySelector('defs'),
+    defsSurface: document.getElementById('defs-surface'),
+    defsHeight: document.getElementById('defs-height'),
     // Baker Groups
     bTerrain: document.getElementById('bake-group-terrain'),
     bLiquid: document.getElementById('bake-group-liquid'),
     bIce: document.getElementById('bake-group-ice'),
     bBio: document.getElementById('bake-group-bio'),
-    bClouds: document.getElementById('bake-group-clouds'),
+    bCraterOverlays: document.getElementById('bake-group-crater-overlays'), // NEW
+    bHeight: document.getElementById('bake-group-height'), // NEW: Height map group
     bBg: document.getElementById('bake-bg'),
     // SVGs
     svgSurface: document.getElementById('surface-baker'),
-    svgClouds: document.getElementById('cloud-baker'),
+    svgHeight: document.getElementById('height-baker'), // NEW: Height SVG
     // Inputs
     seedInput: document.getElementById('seed-input'),
     btnRnd: document.getElementById('btn-rnd'),
@@ -588,52 +610,218 @@ const planetGroup = new THREE.Group();
 scene.add(planetGroup);
 
 // Sphere (Surface)
-const geometry = new THREE.SphereGeometry(1, 128, 128); // Higher poly for smoothness
+const geometry = new THREE.SphereGeometry(1, 512, 512); // Higher poly for smoothness
 const material = new THREE.MeshStandardMaterial({ 
     roughness: 1.0, 
     metalness: 0.0,
+    displacementScale: 0.1, // Scale for topography
 });
 const planetMesh = new THREE.Mesh(geometry, material);
 planetGroup.add(planetMesh);
 
-// Sphere (Clouds)
+/* --- CLOUD SHADER SYSTEM --- */
+const cloudVertexShader = `
+    varying vec2 vUv;
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+    varying vec3 vViewPosition;
+
+    void main() {
+        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vPosition = position; // Local position
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        vViewPosition = -mvPosition.xyz;
+        gl_Position = projectionMatrix * mvPosition;
+    }
+`;
+
+const cloudFragmentShader = `
+    uniform float uTime;
+    uniform vec3 uColor;
+    uniform float uCoverage;
+    uniform float uSeed;
+    uniform vec3 uSunDir;
+    
+    varying vec3 vPosition;
+    varying vec3 vNormal;
+    varying vec3 vViewPosition;
+
+    // Simplex 3D Noise 
+    // (MIT License, Stefan Gustavson)
+    vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+    vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+
+    float snoise(vec3 v){ 
+      const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+      const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+      vec3 i  = floor(v + dot(v, C.yyy) );
+      vec3 x0 = v - i + dot(i, C.xxx) ;
+      vec3 g = step(x0.yzx, x0.xyz);
+      vec3 l = 1.0 - g;
+      vec3 i1 = min( g.xyz, l.zxy );
+      vec3 i2 = max( g.xyz, l.zxy );
+      vec3 x1 = x0 - i1 + C.xxx;
+      vec3 x2 = x0 - i2 + C.yyy;
+      vec3 x3 = x0 - D.yyy;
+      i = mod(i, 289.0 ); 
+      vec4 p = permute( permute( permute( 
+                 i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+               + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) 
+               + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+      float n_ = 1.0/7.0; // N=7
+      vec3  ns = n_ * D.wyz - D.xzx;
+      vec4 j = p - 49.0 * floor(p * ns.z * ns.z);  //  mod(p,N*N)
+      vec4 x_ = floor(j * ns.z);
+      vec4 y_ = floor(j - 7.0 * x_ );    // mod(j,N)
+      vec4 x = x_ *ns.x + ns.yyyy;
+      vec4 y = y_ *ns.x + ns.yyyy;
+      vec4 h = 1.0 - abs(x) - abs(y);
+      vec4 b0 = vec4( x.xy, y.xy );
+      vec4 b1 = vec4( x.zw, y.zw );
+      vec4 s0 = floor(b0)*2.0 + 1.0;
+      vec4 s1 = floor(b1)*2.0 + 1.0;
+      vec4 sh = -step(h, vec4(0.0));
+      vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+      vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+      vec3 p0 = vec3(a0.xy,h.x);
+      vec3 p1 = vec3(a0.zw,h.y);
+      vec3 p2 = vec3(a1.xy,h.z);
+      vec3 p3 = vec3(a1.zw,h.w);
+      vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+      p0 *= norm.x;
+      p1 *= norm.y;
+      p2 *= norm.z;
+      p3 *= norm.w;
+      vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+      m = m * m;
+      return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), 
+                                    dot(p2,x2), dot(p3,x3) ) );
+    }
+
+    float fbm(vec3 x) {
+        float v = 0.0;
+        float a = 0.5;
+        vec3 shift = vec3(100.0);
+        for (int i = 0; i < 4; ++i) {
+            v += a * snoise(x);
+            x = x * 2.0 + shift;
+            a *= 0.5;
+        }
+        return v;
+    }
+
+    void main() {
+        // Rotate noise domain slowly for flow
+        float theta = uTime * 0.01; // Flow Speed
+        mat3 rot = mat3(
+            cos(theta), 0.0, sin(theta),
+            0.0, 1.0, 0.0,
+            -sin(theta), 0.0, cos(theta)
+        );
+        
+        // --- CLUMPING LOGIC ---
+        // Dense atmosphere (high coverage) = Smaller multiplier = Larger clumps
+        // Thin atmosphere (low coverage) = Higher multiplier = Smaller wisps
+        float clumpScale = 3.5 - (uCoverage * 1.5); 
+        
+        // Base seed offset
+        vec3 pos = vPosition * clumpScale + vec3(uSeed * 10.0);
+        pos = rot * pos; // Apply rotation to noise field
+
+        float n = fbm(pos); 
+        float val = n * 0.5 + 0.5; // 0..1 range
+
+        // Density Logic
+        // We raise the base threshold so clouds are inherently sparser/thinner
+        float baseThreshold = 0.55; 
+        float threshold = baseThreshold - (uCoverage * 0.25); 
+        float softness = 0.2;
+        
+        float density = smoothstep(threshold, threshold + softness, val);
+        
+        // --- EDGE FADING (Fresnel) ---
+        // Prevents the "flat" look at the edges of the sphere
+        vec3 viewDir = normalize(vViewPosition);
+        vec3 normal = normalize(vNormal);
+        float NdotV = dot(normal, viewDir);
+        float edgeFade = smoothstep(0.0, 0.35, NdotV); // Fade out as surface turns away
+
+        // Lighting
+        
+        // Rim Light (Fresnel) - stronger on edges where cloud exists
+        float rim = pow(1.0 - max(NdotV, 0.0), 3.0);
+        
+        // Diffuse Sun Light
+        float diff = max(dot(normal, normalize(uSunDir)), 0.0);
+        
+        // Combine
+        vec3 finalColor = uColor * (diff * 0.8 + 0.3) + (rim * 0.2);
+
+        // Cap opacity to ensure translucency (never fully opaque white)
+        // Combine density, coverage factor, and edge fade
+        float finalAlpha = density * (uCoverage * 0.5 + 0.1) * edgeFade * 0.7; 
+
+        gl_FragColor = vec4(finalColor, finalAlpha);
+    }
+`;
+
+// Sphere (Volumetric Clouds)
 const cloudGeo = new THREE.SphereGeometry(1.025, 128, 128);
-const cloudMat = new THREE.MeshStandardMaterial({ 
-    transparent: true, opacity: 0.9, roughness: 1.0, side: THREE.DoubleSide 
+const cloudMat = new THREE.ShaderMaterial({
+    uniforms: {
+        uTime: { value: 0.0 },
+        uColor: { value: new THREE.Color(1, 1, 1) },
+        uCoverage: { value: 0.5 },
+        uSeed: { value: 0.0 },
+        uSunDir: { value: new THREE.Vector3(5, 2, 5).normalize() }
+    },
+    vertexShader: cloudVertexShader,
+    fragmentShader: cloudFragmentShader,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false
 });
 const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
 planetGroup.add(cloudMesh);
 
-// Atmosphere Glow (Shader)
-const atmosGeo = new THREE.SphereGeometry(1.18, 64, 64);
+// Atmosphere Glow (Shader) - SOFT UPDATE
+const atmosGeo = new THREE.SphereGeometry(1.25, 64, 64);
 const atmosMat = new THREE.ShaderMaterial({
     uniforms: {
-        c: { type: "f", value: 0.3 },
-        p: { type: "f", value: 4.5 },
-        glowColor: { type: "c", value: new THREE.Color(0x3b82f6) },
-        viewVector: { type: "v3", value: camera.position }
+        glowColor: { type: "c", value: new THREE.Color(0x3b82f6) }
     },
     vertexShader: `
-        uniform vec3 viewVector;
-        varying float intensity;
+        varying vec3 vNormal;
+        varying vec3 vViewDir;
         void main() {
-            vec3 vNormal = normalize(normalMatrix * normal);
-            vec3 vNormel = normalize(normalMatrix * viewVector);
-            intensity = pow(0.65 - dot(vNormal, vNormel), 4.0);
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            vNormal = normalize(normalMatrix * normal);
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            vViewDir = normalize(-mvPosition.xyz);
+            gl_Position = projectionMatrix * mvPosition;
         }
     `,
     fragmentShader: `
         uniform vec3 glowColor;
-        varying float intensity;
+        varying vec3 vNormal;
+        varying vec3 vViewDir;
         void main() {
-            vec3 glow = glowColor * intensity;
-            gl_FragColor = vec4(glow, intensity * 0.8);
+            // Calculate dot product (approx -1.0 at center, 0.0 at edge)
+            float dotVal = dot(vNormal, vViewDir);
+            
+            // We want the glow to be strongest behind the planet (center) and fade to 0 at the edge.
+            // Using -dotVal gives us 1.0 at center and 0.0 at edge.
+            // Using power 3.0 ensures a very smooth falloff to absolute zero at the edge.
+            float intensity = pow(clamp(-dotVal, 0.0, 1.0), 3.0);
+            
+            // Soften the result significantly (0.5 max opacity)
+            gl_FragColor = vec4(glowColor, intensity * 0.5);
         }
     `,
     side: THREE.BackSide,
     blending: THREE.AdditiveBlending,
-    transparent: true
+    transparent: true,
+    depthWrite: false
 });
 const atmosMesh = new THREE.Mesh(atmosGeo, atmosMat);
 planetGroup.add(atmosMesh);
@@ -646,11 +834,22 @@ sunLight.position.set(5, 2, 5);
 scene.add(sunLight);
 
 /* --- RESIZE HANDLER --- */
-window.addEventListener('resize', () => {
-    camera.aspect = canvas.clientWidth / canvas.clientHeight;
+const updateCamera = () => {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const aspect = w / h;
+    
+    camera.aspect = aspect;
     camera.updateProjectionMatrix();
-    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
-});
+    renderer.setSize(w, h);
+    
+    // Fit planet logic (Radius 1)
+    // Base distance 3.8 works for standard Landscape (Aspect ~1.7)
+    // For Portrait (<1), we need to distance the camera to fit the width.
+    const baseZ = 3.8;
+    camera.position.z = aspect < 1.0 ? baseZ / aspect : baseZ;
+};
+window.addEventListener('resize', updateCamera);
 
 /* --- GENERATION HELPERS --- */
 
@@ -658,25 +857,182 @@ window.addEventListener('resize', () => {
 function generateDeepPalette(hex) {
     const s = hex;
     return [
-        artColor(s, -60, 0, -27),
-        artColor(s, -43, -4, -20),
-        artColor(s, -30, -8, -14),
+        artColor(s, -30, 0, -15),
+        artColor(s, -30, 0, -15),
+        artColor(s, -22, 4, -10),
+        artColor(s, -15, 8, -6),
+        artColor(s, -4, 16, -2),
+        artColor(s, 0, 14, 0),
         s,
-        artColor(s, -8, -6, -6),
-        artColor(s, -4, -8, -2),
-        artColor(s, 0, -7, 0),
-        artColor(s, 4, -7, 3),
-        artColor(s, 11, -8, 7),
-        artColor(s, 13, -11, 11),
-        artColor(s, 21, -12, 16),
-        artColor(s, 21, -12, 16),
-        artColor(s, 28, -14, 21),
-        artColor(s, 28, -14, 21),
-        artColor(s, 28, -14, 21),
-        artColor(s, 36, -16, 26),
-        artColor(s, 36, -16, 26),
-        artColor(s, 42, -17, 32)
+        s,
+        s,
+        artColor(s, 4, 14, 1),
+        artColor(s, 6, 16, 3),
+        artColor(s, 11, 22, 5),
+        artColor(s, 13, 24, 7),
+        artColor(s, 13, 24, 7),
+        artColor(s, 15, 28, 11),
+        artColor(s, 15, 28, 11),
+        artColor(s, 15, 28, 11),
+        artColor(s, 21, 32, 13),
+        artColor(s, 21, 32, 13),
+        artColor(s, 28, 34, 16)
     ];
+}
+
+/**
+ * HELPER: Updates the Color Map Filter based on Water Level
+ * This "stretches" the terrain palette to fit the dry land exactly.
+ */
+function updateTerrainColormap() {
+    if (!state.currentPalette || state.currentPalette.length === 0) return;
+
+    const filterId = `terrain-map-${state.seed}`;
+    const filter = document.getElementById(filterId);
+    if (!filter) return;
+
+    const waterLvl = state.waterLevel / 100; // 0.0 to 1.0
+    const palette = state.currentPalette;
+    const pLen = palette.length;
+    
+    // We create a high-res lookup table (256 entries) to map Input Luminance -> Output Color
+    const steps = 256;
+    const rVals = [], gVals = [], bVals = [];
+
+    for (let i = 0; i < steps; i++) {
+        // The current pixel's height (0.0 to 1.0)
+        const lum = i / (steps - 1);
+
+        let colorHex;
+
+        if (lum < waterLvl) {
+            // CASE A: Underwater
+            // We map this to the lowest terrain color.
+            colorHex = palette[0]; 
+        } else {
+            // CASE B: Land
+            // We re-normalize the height so that "Sea Level" = 0.0 and "Peak" = 1.0
+            const validRange = 1.0 - waterLvl;
+            
+            // Calculate relative height (0.0 at shore, 1.0 at max peak)
+            let relativeH = 0;
+            if (validRange > 0.001) {
+                relativeH = (lum - waterLvl) / validRange;
+            }
+
+            // Map this relative height to the palette index
+            const pIndex = Math.floor(relativeH * pLen);
+            const safeIndex = Math.min(pLen - 1, Math.max(0, pIndex));
+            colorHex = palette[safeIndex];
+        }
+
+        const rgb = hexToRgbUnit(colorHex);
+        rVals.push(rgb.r);
+        gVals.push(rgb.g);
+        bVals.push(rgb.b);
+    }
+
+    // Apply the calculated table to the SVG Filter
+    const funcs = filter.querySelectorAll('feFuncR, feFuncG, feFuncB');
+    if (funcs.length === 3) {
+        funcs[0].setAttribute('type', 'discrete');
+        funcs[1].setAttribute('type', 'discrete');
+        funcs[2].setAttribute('type', 'discrete');
+        
+        funcs[0].setAttribute('tableValues', rVals.join(' '));
+        funcs[1].setAttribute('tableValues', gVals.join(' '));
+        funcs[2].setAttribute('tableValues', bVals.join(' '));
+    }
+}
+
+/**
+ * UPDATED HEIGHT MAP GENERATION
+ * Generates height curves based on planet roughness and zone (ice vs terrain).
+ * Allows for distinct topographical profiles (steep cliffs vs rolling dunes).
+ */
+function updateHeightMap() {
+    if (!state.currentPalette) return;
+
+    const waterLvl = state.waterLevel / 100; // 0.0 to 1.0
+    const steps = 256;
+    const roughness = state.data.roughness || 1.0;
+    
+    // Use palette size to create discrete height steps
+    const paletteLen = state.currentPalette.length;
+    // We only start vertical displacement after the "shadow" tiers of the palette (index 0-5)
+    // This ensures the "sub-surface" or "wet" parts of the land stay flat.
+    const deformationStart = 6; 
+
+    // Filter IDs
+    const terrainFilterId = `height-filter-terrain-${state.seed}`;
+    const iceFilterId = `height-filter-ice-${state.seed}`;
+
+    // Curve calculation
+    // Soft (low roughness) -> Higher exponent (rises slowly, needs more space)
+    // Rough (high roughness) -> Lower exponent (rises quickly, needs less space)
+    // Range: roughness 0.5 -> exp ~2.9 | roughness 2.0 -> exp ~1.1
+    const terrainExp = Math.max(0.5, 3.5 - (roughness * 1.2));
+    const iceExp = 2.5; 
+
+    const computeValues = (exponent, isIce) => {
+        const values = [];
+        for (let i = 0; i < steps; i++) {
+            const lum = i / (steps - 1);
+            if (lum < waterLvl) {
+                values.push(0);
+            } else {
+                const range = 1.0 - waterLvl;
+                let normalizedH = range > 0.001 ? (lum - waterLvl) / range : 0;
+                
+                let heightVal = 0;
+                
+                if (isIce) {
+                    // Ice stays smooth/continuous usually
+                     heightVal = Math.pow(normalizedH, exponent);
+                } else {
+                    // Discretize normalizedH to match palette tiers
+                    let tier = Math.floor(normalizedH * paletteLen);
+                    if (tier >= paletteLen) tier = paletteLen - 1;
+                    
+                    if (tier < deformationStart) {
+                        // "Sub-surface" tiers stay flat
+                        heightVal = 0;
+                    } else {
+                        // Calculate progress through the remaining "active" tiers
+                        const effectiveTier = tier - deformationStart;
+                        const activeTiers = (paletteLen - 1) - deformationStart;
+                        const progress = activeTiers > 0 ? effectiveTier / activeTiers : 1;
+                        
+                        heightVal = Math.pow(progress, exponent);
+                    }
+                }
+                
+                values.push(heightVal.toFixed(3));
+            }
+        }
+        return values.join(' ');
+    };
+
+    const terrainValues = computeValues(terrainExp, false);
+    const iceValues = computeValues(iceExp, true);
+
+    const tFilter = document.getElementById(terrainFilterId);
+    if (tFilter) {
+        const funcs = tFilter.querySelectorAll('feFuncR, feFuncG, feFuncB');
+        funcs.forEach(f => {
+            f.setAttribute('type', 'discrete');
+            f.setAttribute('tableValues', terrainValues);
+        });
+    }
+
+    const iFilter = document.getElementById(iceFilterId);
+    if (iFilter) {
+        const funcs = iFilter.querySelectorAll('feFuncR, feFuncG, feFuncB');
+        funcs.forEach(f => {
+            f.setAttribute('type', 'discrete');
+            f.setAttribute('tableValues', iceValues);
+        });
+    }
 }
 
 async function bakeSVGToTexture(svgElement) {
@@ -690,6 +1046,12 @@ async function bakeSVGToTexture(svgElement) {
             const tex = new THREE.Texture(img);
             tex.colorSpace = THREE.SRGBColorSpace;
             tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            
+            // --- FIX FOR SEAMS ---
+            // RepeatWrapping ensures the left edge blends into the right edge 
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.ClampToEdgeWrapping;
+            
             tex.needsUpdate = true;
             URL.revokeObjectURL(url);
             resolve(tex);
@@ -698,125 +1060,64 @@ async function bakeSVGToTexture(svgElement) {
     });
 }
 
-// RESTORED: "Proper" Cloud Generation Logic (Spines + Stacks)
-function generateCloudsSVG(rng, data) {
-    const R = 640; 
+function generateCratersSVG(rng, count) {
+    if (count <= 0) return "";
     
-    // Helper: Create a curved path segment
-    const generateCloudSpine = (yBase, width, xOffset) => {
-        const points = [];
-        const steps = 60;
-        const startX = -width / 2 + xOffset;
-        const stepSize = width / steps;
-        let yDrift = 0;
-        for (let i = 0; i <= steps; i++) {
-            const xRel = startX + (i * stepSize);
-            const xRatio = xRel / R;
-            const sphereCurve = (xRatio * xRatio) * yBase * -0.8; 
-            let y = yBase + sphereCurve;
-            yDrift += (rng() - 0.5) * 1.0;
-            yDrift *= 0.95;
-            y += yDrift;
-            points.push({ x: 1024 + xRel * 1.5, y: 512 + y }); 
-        }
-        return points;
-    };
-
-    // Helper: Expand spine into a bubbly shape
-    const generateCloudShapeFromSpine = (spinePoints, options = {}) => {
-        const { baseThickness=30, thicknessVariance=10, edgeNoise=10, taperPower=0.5 } = options;
-        if (spinePoints.length < 3) return "";
-        const topPoints = [], botPoints = [];
-        let thickness = baseThickness;
-        for (let i = 0; i < spinePoints.length; i++) {
-            const p_curr = spinePoints[i];
-            const p_next = spinePoints[Math.min(spinePoints.length-1, i+1)];
-            const p_prev = spinePoints[Math.max(0, i-1)];
-            const dx = p_next.x - p_prev.x, dy = p_next.y - p_prev.y;
-            let nx = -dy, ny = dx;
-            const len = Math.sqrt(nx*nx+ny*ny);
-            if (len > 0) { nx /= len; ny /= len; }
-            const progress = i / (spinePoints.length - 1);
-            const taper = Math.sin(progress * Math.PI); 
-            const thickMod = Math.pow(taper, taperPower);
-            thickness += (rng() - 0.5) * (thicknessVariance / 5);
-            thickness = Math.max(5, thickness); 
-            const currentThick = thickness * thickMod;
-            const jag = (rng() - 0.5) * edgeNoise * thickMod;
-            topPoints.push({ x: p_curr.x + nx * (currentThick * 0.5 + jag), y: p_curr.y + ny * (currentThick * 0.5 + jag) });
-            botPoints.push({ x: p_curr.x - nx * (currentThick * 0.5 + jag), y: p_curr.y - ny * (currentThick * 0.5 + jag) });
-        }
-        let d = `M ${topPoints[0].x.toFixed(1)} ${topPoints[0].y.toFixed(1)}`;
-        for (let i = 1; i < topPoints.length; i++) d += ` L ${topPoints[i].x.toFixed(1)} ${topPoints[i].y.toFixed(1)}`;
-        for (let i = botPoints.length - 1; i >= 0; i--) d += ` L ${botPoints[i].x.toFixed(1)} ${botPoints[i].y.toFixed(1)}`;
-        d += " Z";
-        return d;
-    };
-
-    // Helper: Create stack of cloud shapes (The "Proper" Design)
-    const generateCloudSystem = (driverSpine, baseColor, yBase) => {
-        const systemElements = [];
-        const stackingDirection = yBase < 0 ? -1 : 1; 
-        const createStack = (spine, layers, scale) => {
-            const elements = [];
-            for (let i = 0; i <= layers; i++) {
-                const lengthRatio = 1.0 - (i * 0.08); 
-                const subLength = Math.floor(spine.length * Math.max(0.4, lengthRatio));
-                const slack = spine.length - subLength;
-                const startIdx = Math.floor(rng() * (slack * 0.8) + (slack * 0.1));
-                const baseSubSpine = spine.slice(startIdx, startIdx + subLength);
-                const offsetDist = i * 14 * scale * stackingDirection; 
-                const disjointX = (rng() - 0.5) * 20 * scale; 
-                const offsetSubSpine = baseSubSpine.map((p, j, arr) => {
-                    const p_next = arr[Math.min(arr.length-1, j+1)];
-                    const p_prev = arr[Math.max(0, j-1)];
-                    const dx = p_next.x - p_prev.x, dy = p_next.y - p_prev.y;
-                    let nx = -dy, ny = dx;
-                    const len = Math.sqrt(nx*nx+ny*ny);
-                    if (len > 0) { nx /= len; ny /= len; }
-                    return { x: p.x + (nx * offsetDist) + disjointX, y: p.y + (ny * offsetDist) };
-                });
-                const subPathData = generateCloudShapeFromSpine(offsetSubSpine, {
-                    baseThickness: (35 - (i * 2)) * scale, edgeNoise: (12 + i) * scale, taperPower: 0.5
-                });
-                if (subPathData) {
-                    const el = `<path d="${subPathData}" fill="${artColor(baseColor, 40 - (i * 10), -5)}" fill-opacity="0.6"/>`;
-                    elements.push(el);
-                }
-            }
-            return elements;
-        };
-        const mainLayers = Math.floor(rng() * 4) + 4; 
-        systemElements.push(...createStack(driverSpine, mainLayers, 1.0));
-        return systemElements;
-    };
-
-    const clusterCount = Math.floor(rng() * 3) + 3;
-    const range = 1.85; 
-    const zoneSize = range / clusterCount;
-    let tileInner = "";
+    // Instead of drawing individual craters with gradients, we draw 
+    // clusters of black shapes that define the "Hole".
+    // A separate filter will then expand these shapes to create the "Rim".
     
-    // Generate horizontal bands
-    for (let i = 0; i < clusterCount; i++) {
-        const zoneTop = -(range/2) + (i * zoneSize);
-        const latPos = zoneTop + (rng() * zoneSize * 0.8) + (zoneSize * 0.1);
-        const yBase = latPos * R;
-        const maxChord = Math.sqrt(Math.max(0, R*R - yBase*yBase)) * 2;
-        const width = maxChord * (0.8 + rng() * 0.8);
-        const maxOffset = (maxChord - width) / 2;
-        const xOffset = (rng() * maxOffset * 2) - maxOffset;
-        const dist = Math.abs(latPos);
-        const col = artColor(data.cloudHex, dist * -15, dist * -5);
+    let els = "";
+    
+    for (let i = 0; i < count; i++) {
+        // Main Position
+        const cx = Math.floor(rng() * 2048);
+        const cy = Math.floor(rng() * 1024);
         
-        const spine = generateCloudSpine(yBase, width, xOffset);
-        const els = generateCloudSystem(spine, col, yBase);
-        tileInner += els.join('');
+        // Base Radius: Power law distribution
+        const rBase = rng(); 
+        let r = 0;
+        if(rBase > 0.98) r = 40 + rng() * 60; // Huge basin
+        else if(rBase > 0.9) r = 20 + rng() * 30; // Large crater
+        else r = 4 + rng() * 15; // Common crater
+
+        // Aspect ratio correction for polar stretching
+        const lat = Math.abs(cy - 512) / 512;
+        const stretch = (1 + lat * lat * 2);
+
+        // Amorphous Logic: Draw multiple ellipses near this center to create a non-round shape
+        // Number of blobs in this crater cluster
+        const blobs = Math.floor(rng() * 3) + 1; 
+
+        for (let j = 0; j < blobs; j++) {
+            // Offset from center (First blob is always center)
+            const angle = rng() * Math.PI * 2;
+            const dist = j === 0 ? 0 : rng() * r * 0.5;
+            
+            const bx = cx + Math.cos(angle) * dist;
+            const by = cy + Math.sin(angle) * dist;
+
+            // Varying sub-radius
+            const subR = r * (0.2 + rng() * 1);
+            
+            const rx = subR * stretch;
+            const ry = subR;
+
+            // Draw Hole Shape (Fill needs to be opaque for the filter to work on alpha)
+            const el = `<ellipse cx="${bx}" cy="${by}" rx="${rx}" ry="${ry}" fill="#000" />`;
+            els += el;
+
+            // Wrap X (if close to edges)
+            if (bx < rx) {
+                els += `<ellipse cx="${bx + 2048}" cy="${by}" rx="${rx}" ry="${ry}" fill="#000" />`;
+            } else if (bx > 2048 - rx) {
+                els += `<ellipse cx="${bx - 2048}" cy="${by}" rx="${rx}" ry="${ry}" fill="#000" />`;
+            }
+        }
     }
-    // Duplicate for wrapping - OPTIMIZED: Using Groups
-    let allPaths = `<g transform="translate(-2048,0)">${tileInner}</g>`;
-    allPaths += `<g>${tileInner}</g>`;
-    allPaths += `<g transform="translate(2048,0)">${tileInner}</g>`;
-    return allPaths;
+    
+    // Return a group with the shapes. The parent logic will wrap this in a filter.
+    return `<g>${els}</g>`;
 }
 
 function generatePlanetData(rng) {
@@ -870,7 +1171,8 @@ function generatePlanetData(rng) {
     if (rng() > 0.2) { 
         atmosDensity = rng() * 0.3; 
         atmosDensity += atmosContribution;
-        atmosDensity = Math.max(0, Math.min(1, atmosDensity)); 
+        // Cap atmos density slightly lower to prevent 100% whiteout
+        atmosDensity = Math.max(0, Math.min(0.95, atmosDensity)); 
         if (liquidState === "sediment") {
             atmosDensity = 0.9 + (rng() * 0.1);
             atmosName = `Dense Vaporized ${liquid.name}`;
@@ -884,6 +1186,15 @@ function generatePlanetData(rng) {
     } else {
         atmosName = "Vacuum";
     }
+    
+    // IMPACT LOGIC: No/Thin Atmosphere = More Craters
+    let craterCount = 0;
+    if (atmosDensity < 0.15) {
+        const densityFactor = 1 - (atmosDensity / 0.15); // 0 to 1
+        // Very roughly 20 to 150 craters
+        craterCount = Math.floor(20 + (rng() * 30 * densityFactor));
+    }
+
     let hasLife = false, lifeType = "None", bioColor = null, bioMinT = 0, bioMaxT = 0;
     if (liquidState === "liquid") {
         if (liquid.tag === "H2O" && baseTemp > -20 && baseTemp < 80) {
@@ -902,10 +1213,18 @@ function generatePlanetData(rng) {
     if (liquidState === "sediment") latBoil = -2.0;
     let suggestedWater = (liquidState === "none" || liquidState === "sediment") ? Math.floor(rng() * 15) : Math.floor(rng() * 40 + 30);
     if (hasLife) suggestedWater = Math.floor(rng() * 20 + 45);
+
+    // CLOUD PARAMETERS
+    // Higher temp = more turbulence. Density = more coverage.
+    const cloudTurbulence = Math.min(1.0, Math.max(0.0, (baseTemp + 100) / 400));
+    const cloudCoverage = atmosDensity;
+
     return {
         baseTemp, maxT, minT, solid, liquid, latBoil, latFreeze, oceanName, solidName, atmosName, atmosDensity,
         cloudHex: cloudColor, hasLife, lifeType, bioColor, bioMinT, bioMaxT, rings: rng() < 0.15,
-        baseFreq: 0.006 - ((solid.roughness * 0.5) * 0.0045), suggestedWater, roughness: solid.roughness * (0.5 + rng())
+        baseFreq: 0.006 - ((solid.roughness * 0.5) * 0.0045), suggestedWater, roughness: solid.roughness * (0.5 + rng()),
+        craterCount,
+        cloudTurbulence, cloudCoverage
     };
 }
 
@@ -918,13 +1237,19 @@ async function fullRebuild() {
     dom.bLiquid.innerHTML = '';
     dom.bIce.innerHTML = '';
     dom.bBio.innerHTML = '';
-    dom.bClouds.innerHTML = '';
-    dom.defs.querySelectorAll('.dynamic-def').forEach(el => el.remove());
+    dom.bHeight.innerHTML = ''; // Clear height
+    dom.bCraterOverlays.innerHTML = ''; // Clear overlay
+    
+    // Clear dynamic defs from BOTH surfaces
+    dom.defsSurface.querySelectorAll('.dynamic-def').forEach(el => el.remove());
+    dom.defsHeight.querySelectorAll('.dynamic-def').forEach(el => el.remove());
 
     const rng = createRNG(state.seed);
     state.data = generatePlanetData(rng);
     const data = state.data;
-    const palette = generateDeepPalette(data.solid.color); // 18 colors!
+    
+    // SAVE PALETTE TO STATE
+    state.currentPalette = generateDeepPalette(data.solid.color); 
 
     // Update Text UI with Ranges and Tags
     dom.valTemp.innerHTML = `${data.baseTemp}°C <span class="temp-range">(<span class="t-min">${data.minT}°</span> / <span class="t-max">${data.maxT}°</span>)</span>`;
@@ -936,11 +1261,12 @@ async function fullRebuild() {
 
     // Update Atmosphere Glow Color
     atmosMat.uniforms.glowColor.value.set(data.cloudHex);
-    atmosMat.uniforms.c.value = 0.2 + (data.atmosDensity * 0.3);
-    atmosMesh.visible = data.atmosDensity > 0.05;
+    atmosMesh.visible = true;
 
     // 1. GENERATE NOISE PATTERN (TILED 1024x1024)
-    // We generate one noise map and reuse it for EVERYTHING.
+    // We must generate unique IDs for patterns in both SVGs or duplicate the content.
+    // For simplicity, we add the noise filter and pattern to BOTH defs.
+    
     const noiseID = `noise-${state.seed}`;
     const noiseFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     noiseFilter.setAttribute("id", noiseID);
@@ -948,19 +1274,21 @@ async function fullRebuild() {
     noiseFilter.setAttribute("width", "100%"); noiseFilter.setAttribute("height", "100%");
     noiseFilter.classList.add('dynamic-def');
     
-    // Using feColorMatrix to ensure grayscale contrast is standardized
+    // REDUCED CONTRAST for Height Map data integrity (was slope 3, now 1.5)
     noiseFilter.innerHTML = `
         <feTurbulence type="fractalNoise" baseFrequency="${data.baseFreq}" numOctaves="6" seed="${Math.floor(rng()*100)}" stitchTiles="stitch" result="turb"/>
         <feColorMatrix type="saturate" values="0" in="turb" result="gray"/>
         <feComponentTransfer in="gray" result="contrasted">
-            <feFuncR type="linear" slope="3" intercept="-1"/>
-            <feFuncG type="linear" slope="3" intercept="-1"/>
-            <feFuncB type="linear" slope="3" intercept="-1"/>
+            <feFuncR type="linear" slope="1.5" intercept="-0.25"/>
+            <feFuncG type="linear" slope="1.5" intercept="-0.25"/>
+            <feFuncB type="linear" slope="1.5" intercept="-0.25"/>
         </feComponentTransfer>
     `;
-    dom.defs.appendChild(noiseFilter);
+    
+    // Append to BOTH
+    dom.defsSurface.appendChild(noiseFilter.cloneNode(true));
+    dom.defsHeight.appendChild(noiseFilter.cloneNode(true));
 
-    // Create Pattern Def used by all layers
     const noisePatternId = `pat-noise-${state.seed}`;
     const pattern = document.createElementNS("http://www.w3.org/2000/svg", "pattern");
     pattern.setAttribute("id", noisePatternId);
@@ -968,63 +1296,187 @@ async function fullRebuild() {
     pattern.setAttribute("width", "1024"); pattern.setAttribute("height", "1024");
     pattern.classList.add('dynamic-def');
     pattern.innerHTML = `<rect width="1024" height="1024" filter="url(#${noiseID})"/>`;
-    dom.defs.appendChild(pattern);
+    
+    // Append to BOTH
+    dom.defsSurface.appendChild(pattern.cloneNode(true));
+    dom.defsHeight.appendChild(pattern.cloneNode(true));
 
-    // 2. TERRAIN LAYERS - OPTIMIZED: COLOR MAPPING
-    // Instead of 18 masks (slow!), we use one feComponentTransfer to map luminance to palette colors.
-    
-    // Prepare table values for R, G, B
-    let rVals = [], gVals = [], bVals = [];
-    palette.forEach(hex => {
-        const rgb = hexToRgbUnit(hex);
-        rVals.push(rgb.r); gVals.push(rgb.g); bVals.push(rgb.b);
-    });
-    
+    // 2. TERRAIN COLOR FILTER (Surface Only)
     const mapFilterId = `terrain-map-${state.seed}`;
     const mapFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     mapFilter.setAttribute("id", mapFilterId);
     mapFilter.classList.add('dynamic-def');
-    
-    // 'discrete' type creates hard edges between colors, mimicking the "threshold" look exactly without the cost.
     mapFilter.innerHTML = `
         <feComponentTransfer>
-            <feFuncR type="discrete" tableValues="${rVals.join(' ')}"/>
-            <feFuncG type="discrete" tableValues="${gVals.join(' ')}"/>
-            <feFuncB type="discrete" tableValues="${bVals.join(' ')}"/>
+            <feFuncR type="discrete" tableValues="0"/>
+            <feFuncG type="discrete" tableValues="0"/>
+            <feFuncB type="discrete" tableValues="0"/>
         </feComponentTransfer>
     `;
-    dom.defs.appendChild(mapFilter);
+    dom.defsSurface.appendChild(mapFilter);
 
-    // One single rect for the terrain
+    // Call our new updater immediately to set initial colors
+    updateTerrainColormap();
+
+    // CRATER GENERATION (SYNCED & BLENDED)
+    let craterImgStr = "";
+    
+    if (data.craterCount > 0) {
+        // Generate the group of amorphous hole shapes
+        const shapes = generateCratersSVG(rng, data.craterCount);
+        
+        // Define the sophisticated composite filter
+        // 1. DILATE the hole shapes to find the Rim Area
+        // 2. EXCLUDE the original hole shapes from the Rim Area
+        // 3. COLOR the Hole Dark Grey (Depth)
+        // 4. COLOR the Rim White (Height)
+        const filterDef = `
+            <filter id="complex-crater-filter" x="-20%" y="-20%" width="140%" height="140%">
+                <!-- GENERATE NOISE -->
+                <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="3" seed="${Math.floor(rng()*100)}" result="noise"/>
+                
+                <!-- DISPLACE HOLE SHAPE (Skewing/Imperfection) -->
+                <feDisplacementMap in="SourceAlpha" in2="noise" scale="8" xChannelSelector="R" yChannelSelector="G" result="distortedAlpha"/>
+                <feGaussianBlur in="distortedAlpha" stdDeviation="2" result="softHole"/>
+
+                <!-- GENERATE RIM MASK -->
+                <feMorphology in="SourceAlpha" operator="dilate" radius="3" result="dilated"/>
+                <feComposite in="dilated" in2="SourceAlpha" operator="out" result="rimMask"/>
+                <!-- Displace Rim independently so it matches the vibe but isn't identical -->
+                <feDisplacementMap in="rimMask" in2="noise" scale="6" result="distortedRimRaw"/>
+                <feGaussianBlur in="distortedRimRaw" stdDeviation="3" result="softRim"/>
+
+                <!-- COLOR HOLE: TEXTURED DARKNESS -->
+                <!-- We use the noise to create a rocky floor texture -->
+                <feColorMatrix type="matrix" values="0.2 0 0 0 0  0.2 0 0 0 0  0.2 0 0 0 0  0 0 0 1 0" in="noise" result="darkRock"/>
+                <feComposite in="darkRock" in2="softHole" operator="in" result="finalHole"/>
+
+                <!-- COLOR RIM: White -->
+                <feFlood flood-color="#ffffff" flood-opacity="0.6" result="colRim"/> 
+                <feComposite in="colRim" in2="softRim" operator="in" result="finalRim"/>
+
+                <!-- MERGE -->
+                <feMerge>
+                    <feMergeNode in="finalHole"/>
+                    <feMergeNode in="finalRim"/>
+                </feMerge>
+            </filter>
+        `;
+
+        // Wrap it in a standalone SVG for feImage
+        const fullHeightSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1024">
+            <defs>${filterDef}</defs>
+            <g filter="url(#complex-crater-filter)">${shapes}</g>
+        </svg>`;
+        
+        const base64SVG = btoa(fullHeightSVG);
+        craterImgStr = `data:image/svg+xml;base64,${base64SVG}`;
+    }
+
+    // --- TERRAIN CONSTRUCTION (COLOR) ---
+    const tGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    tGroup.setAttribute("filter", `url(#${mapFilterId})`);
+    
     const terrainRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    terrainRect.setAttribute("width", "2048"); terrainRect.setAttribute("height", "1024");
+    terrainRect.setAttribute("x", "-100");
+    terrainRect.setAttribute("width", "2248"); 
+    terrainRect.setAttribute("height", "1024");
     terrainRect.setAttribute("fill", `url(#${noisePatternId})`);
-    terrainRect.setAttribute("filter", `url(#${mapFilterId})`);
-    dom.bTerrain.appendChild(terrainRect);
+    tGroup.appendChild(terrainRect);
+    
+    if (data.craterCount > 0) {
+        // Craters for Surface Visuals
+        // Using "Hard-Light" blend mode:
+        // Dark Grey Hole -> Darkens terrain
+        // White Rim -> Lightens terrain
+        // Transparent -> No change
+        const cWrapper = document.createElementNS("http://www.w3.org/2000/svg", "image");
+        cWrapper.setAttribute("href", craterImgStr);
+        cWrapper.setAttribute("width", "2048");
+        cWrapper.setAttribute("height", "1024");
+        cWrapper.style.mixBlendMode = "hard-light"; 
+        tGroup.appendChild(cWrapper);
 
+        // --- NEW: OVERLAY FOR WATER DEPTH ---
+        // This ensures the crater hole darkens the liquid above it
+        // We use multiply to ensure the dark parts of the crater affect the water
+        const cOverlay = cWrapper.cloneNode(true);
+        cOverlay.style.mixBlendMode = "multiply"; 
+        cOverlay.style.opacity = "0.7"; 
+        dom.bCraterOverlays.appendChild(cOverlay);
+    }
+    dom.bTerrain.appendChild(tGroup);
 
-    // 3. LIQUID / ICE MASKS
+    // --- HEIGHT MAP GENERATION (Height SVG Only) ---
+    // Create filters with optional crater integration via feBlend
+
+    const createHeightFilter = (id) => {
+        const f = document.createElementNS("http://www.w3.org/2000/svg", "filter");
+        f.setAttribute("id", id);
+        f.classList.add('dynamic-def');
+        
+        let src = "SourceGraphic";
+        let html = "";
+        
+        // Inject craters via feImage + feBlend if they exist
+        // This ensures the height map deformation sees the crater shape before mapping to steps
+        if (data.craterCount > 0 && craterImgStr) {
+             html += `<feImage href="${craterImgStr}" x="0" y="0" width="2048" height="1024" result="craters" preserveAspectRatio="none"/>`;
+             html += `<feBlend in="craters" in2="SourceGraphic" mode="hard-light" result="blended"/>`;
+             src = "blended";
+        }
+        
+        html += `
+        <feComponentTransfer in="${src}">
+            <feFuncR type="discrete" tableValues="0"/>
+            <feFuncG type="discrete" tableValues="0"/>
+            <feFuncB type="discrete" tableValues="0"/>
+        </feComponentTransfer>`;
+        
+        f.innerHTML = html;
+        return f;
+    };
+
+    const heightFilterTerrainId = `height-filter-terrain-${state.seed}`;
+    dom.defsHeight.appendChild(createHeightFilter(heightFilterTerrainId));
+
+    const heightFilterIceId = `height-filter-ice-${state.seed}`;
+    dom.defsHeight.appendChild(createHeightFilter(heightFilterIceId));
+    
+    updateHeightMap(); // Set initial tables
+
+    // 1. Terrain Height Group
+    const hGroupTerrain = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    hGroupTerrain.setAttribute("filter", `url(#${heightFilterTerrainId})`);
+    // This rect uses noise pattern. Pattern must exist in defsHeight.
+    hGroupTerrain.appendChild(terrainRect.cloneNode(true));
+    // NOTE: We do NOT append craters here anymore; they are integrated in the filter.
+    dom.bHeight.appendChild(hGroupTerrain);
+    
+    // 3. LIQUID / ICE MASKS (Used for Color)
     const lMaskId = `filter-mask-liq-${state.seed}`;
     const lFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
     lFilter.setAttribute("id", lMaskId);
     lFilter.classList.add('dynamic-def');
-    // Initial slope/intercept will be set by softUpdate immediately after
     lFilter.innerHTML = `<feComponentTransfer><feFuncR type="linear" slope="1" intercept="0" /><feFuncG type="linear" slope="1" intercept="0" /><feFuncB type="linear" slope="1" intercept="0" /></feComponentTransfer>`;
-    dom.defs.appendChild(lFilter);
+    dom.defsSurface.appendChild(lFilter);
 
     const liqMask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
     liqMask.setAttribute("id", `mask-liq-${state.seed}`);
     liqMask.classList.add('dynamic-def');
-    const lmRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    lmRect.setAttribute("width","2048"); lmRect.setAttribute("height","1024");
-    lmRect.setAttribute("fill", `url(#${noisePatternId})`);
-    lmRect.setAttribute("filter", `url(#${lMaskId})`);
-    liqMask.appendChild(lmRect);
-    dom.defs.appendChild(liqMask);
+    
+    const maskGroup = tGroup.cloneNode(true); 
+    maskGroup.removeAttribute("filter"); 
+    maskGroup.setAttribute("filter", `url(#${lMaskId})`); 
+    
+    liqMask.appendChild(maskGroup);
+    dom.defsSurface.appendChild(liqMask);
 
     // Liquid Rect
     const lRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    lRect.setAttribute("width","2048"); lRect.setAttribute("height","1024");
+    lRect.setAttribute("x", "-100");
+    lRect.setAttribute("width","2248"); 
+    lRect.setAttribute("height","1024");
     lRect.setAttribute("fill", data.liquid.color);
     lRect.setAttribute("mask", `url(#mask-liq-${state.seed})`);
     if(data.liquid.type !== "magma") lRect.setAttribute("filter", "url(#liquid-blur)");
@@ -1039,16 +1491,26 @@ async function fullRebuild() {
     const fTop = (0.5 - data.latFreeze*0.5)*100;
     const fBot = (0.5 + data.latFreeze*0.5)*100;
     zoneGrad.innerHTML = `<stop offset="0%" stop-color="#fff"/><stop offset="${fTop}%" stop-color="#fff"/><stop offset="${fTop}%" stop-color="#000"/><stop offset="${fBot}%" stop-color="#000"/><stop offset="${fBot}%" stop-color="#fff"/><stop offset="100%" stop-color="#fff"/>`;
-    dom.defs.appendChild(zoneGrad);
+    
+    // Add to BOTH
+    dom.defsSurface.appendChild(zoneGrad.cloneNode(true));
+    dom.defsHeight.appendChild(zoneGrad.cloneNode(true));
 
     // Ice Mask
     const iceZoneMaskId = `mask-ice-zone-${state.seed}`;
     const izMask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
     izMask.setAttribute("id", iceZoneMaskId);
     izMask.classList.add('dynamic-def');
+    // NOTE: zone-warp must be present in both SVGs static defs for this to work
     izMask.innerHTML = `<rect width="2048" height="1024" fill="url(#${zoneGradId})" filter="url(#zone-warp)"/>`;
-    dom.defs.appendChild(izMask);
+    dom.defsSurface.appendChild(izMask.cloneNode(true));
     
+    // For Height Mask, we need a clone that points to the same filter (which exists in both)
+    const izMaskH = izMask.cloneNode(true);
+    // Ensure it uses the height-specific zone warp if we named it differently, but we named both #zone-warp in HTML
+    dom.defsHeight.appendChild(izMaskH);
+    
+    // Ice Surface Visuals
     const iGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     iGroup.setAttribute("mask", `url(#${iceZoneMaskId})`);
     const iRect = lRect.cloneNode(); 
@@ -1057,30 +1519,62 @@ async function fullRebuild() {
     iGroup.appendChild(iRect);
     dom.bIce.appendChild(iGroup);
 
-    // 4. CLOUDS (Procedural Bands)
-    if (state.cloudsEnabled && data.atmosDensity > 0.05) {
-        const cloudSVG = generateCloudsSVG(rng, data);
-        dom.bClouds.innerHTML = cloudSVG;
-    }
+    // 2b. ICE HEIGHT GROUP
+    const hGroupIce = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    hGroupIce.setAttribute("filter", `url(#${heightFilterIceId})`);
+    hGroupIce.setAttribute("mask", `url(#${iceZoneMaskId})`); 
+    
+    const iceHRect = terrainRect.cloneNode(true);
+    hGroupIce.appendChild(iceHRect);
+    // Craters integrated via filter
+    dom.bHeight.appendChild(hGroupIce);
 
-    // UPDATE THREE.JS TEXTURES
-    softUpdate(true); // Sets thresholds based on water level
-    
-    // Bake Surface
-    const surfaceTex = await bakeSVGToTexture(dom.svgSurface);
-    material.map = surfaceTex;
-    material.needsUpdate = true;
-    
-    // Bake Clouds
-    if (state.cloudsEnabled) {
-        const cloudTex = await bakeSVGToTexture(dom.svgClouds);
-        cloudMesh.material.map = cloudTex;
+    // 5. POLAR CAP MASK (Fixes pinch artifacts at poles)
+    // Overlays a gradient on the height map to force displacement to 0 at poles
+    const polarGradId = `grad-polar-${state.seed}`;
+    const polarGrad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
+    polarGrad.setAttribute("id", polarGradId);
+    polarGrad.setAttribute("x1", "0"); polarGrad.setAttribute("y1", "0");
+    polarGrad.setAttribute("x2", "0"); polarGrad.setAttribute("y2", "1");
+    polarGrad.classList.add('dynamic-def');
+    polarGrad.innerHTML = `
+        <stop offset="0%" stop-color="#000" stop-opacity="1"/>
+        <stop offset="2%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="98%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="1"/>
+    `;
+    dom.defsHeight.appendChild(polarGrad);
+
+    const polarCapRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    polarCapRect.setAttribute("width", "2048");
+    polarCapRect.setAttribute("height", "1024");
+    polarCapRect.setAttribute("fill", `url(#${polarGradId})`);
+    dom.bHeight.appendChild(polarCapRect);
+
+    // 4. CLOUDS (Volumetric Update)
+    if (state.cloudsEnabled && data.atmosDensity > 0.05) {
+        // Feed shader uniforms
+        cloudMat.uniforms.uColor.value.set(data.cloudHex);
+        cloudMat.uniforms.uCoverage.value = data.atmosDensity;
+        cloudMat.uniforms.uSeed.value = rng();
         cloudMesh.visible = true;
     } else {
         cloudMesh.visible = false;
     }
-    cloudMesh.material.needsUpdate = true;
 
+    // UPDATE THREE.JS TEXTURES
+    softUpdate(true); 
+    
+    // Bake Surface Color
+    const surfaceTex = await bakeSVGToTexture(dom.svgSurface);
+    material.map = surfaceTex;
+    
+    // Bake Height Map (for Topography)
+    const heightTex = await bakeSVGToTexture(dom.svgHeight);
+    material.displacementMap = heightTex;
+    // material.displacementScale is set in softUpdate based on roughness
+    material.needsUpdate = true;
+    
     // Reset Tilt
     planetMesh.rotation.z = 0;
     cloudMesh.rotation.z = 0;
@@ -1092,23 +1586,30 @@ async function fullRebuild() {
 function softUpdate(isGenerating = false) {
     const waterFactor = state.waterLevel / 100;
     
-    // Update SVG Thresholds
-    const updateFilter = (id, slope, intercept) => {
-        const f = document.getElementById(id);
-        if(!f) return;
+    // Update terrain colors based on new sea level
+    updateTerrainColormap();
+    
+    // Update displacement (height) based on new sea level and roughness
+    updateHeightMap();
+
+    // Physically scale displacement based on planet roughness
+    // Increased Multiplier for visibility
+    const roughness = state.data ? state.data.roughness : 1.0;
+    material.displacementScale = 0.05 + (roughness * 0.15);
+
+    // Update Liquid Mask Threshold
+    const lMaskId = `filter-mask-liq-${state.seed}`;
+    const slope = -50;
+    const intercept = (waterFactor * 50) + 0.5; 
+    
+    const f = document.getElementById(lMaskId);
+    if(f) {
         const funcs = f.querySelectorAll('feFuncR, feFuncG, feFuncB');
         funcs.forEach(el => {
             el.setAttribute('slope', slope);
             el.setAttribute('intercept', intercept);
         });
-    };
-
-    // Update Liquid Mask
-    const lMaskId = `filter-mask-liq-${state.seed}`;
-    // Liquid noise is 0..1. High water factor means we accept more noise values.
-    const slope = -50;
-    const intercept = (waterFactor * 50) + 0.5; 
-    updateFilter(lMaskId, slope, intercept);
+    }
 
     // Update Lighting from Shadow Slider
     const sunIntensity = (100 - state.shadow) / 50 * 2.0;
@@ -1117,13 +1618,20 @@ function softUpdate(isGenerating = false) {
     ambientLight.intensity = Math.max(0.02, ambientIntensity);
     
     // Clouds Visibility
-    cloudMesh.visible = state.cloudsEnabled;
+    cloudMesh.visible = state.cloudsEnabled && (state.data ? state.data.atmosDensity > 0.05 : false);
 
     if (!isGenerating) {
-        // If simply sliding slider, re-bake surface
+        // Re-bake Surface Color
         bakeSVGToTexture(dom.svgSurface).then(tex => {
             if(material.map) material.map.dispose();
             material.map = tex;
+            material.needsUpdate = true;
+        });
+        
+        // Re-bake Height Map (Topography)
+        bakeSVGToTexture(dom.svgHeight).then(tex => {
+            if(material.displacementMap) material.displacementMap.dispose();
+            material.displacementMap = tex;
             material.needsUpdate = true;
         });
     }
@@ -1135,28 +1643,60 @@ function initInteraction() {
     
     const handleStart = (x) => {
         state.isDragging = true;
-        state.lastX = x;
+        state.dragStartX = x;
+        state.dragStartRotation = planetGroup.rotation.y;
+        
         state.velocity = 0;
         state.autoRotate = false;
         dom.chkAutoRotate.checked = false;
+        state.targetRotation = planetGroup.rotation.y;
+        
+        // Reset Inertia tracking
+        state.lastMouseX = x;
+        state.lastMouseTime = Date.now();
+        state.dragVelocity = 0;
     };
 
     const handleMove = (x) => {
         if (!state.isDragging) return;
-        const delta = x - state.lastX;
-        state.lastX = x;
-        state.velocity = delta * 0.005; // Sensitivity
-        planetGroup.rotation.y += state.velocity;
+        
+        const now = Date.now();
+        const deltaX = x - state.dragStartX;
+        const sensitivity = 0.005;
+        state.targetRotation = state.dragStartRotation + (deltaX * sensitivity);
+
+        // Calculate velocity for inertia
+        const dt = now - state.lastMouseTime;
+        if (dt > 0) {
+            const dx = x - state.lastMouseX;
+            // Calculate rotational velocity: radians per frame (approx 16ms)
+            // Multiplier tweaks the "heaviness"
+            state.dragVelocity = (dx * sensitivity); 
+        }
+
+        state.lastMouseX = x;
+        state.lastMouseTime = now;
     };
 
     const handleEnd = () => {
         state.isDragging = false;
+        
+        // Apply the calculated velocity from the drag motion
+        // If user holds still before releasing, dt will be large in the next frame check
+        // or velocity will be old. We decay it if too old.
+        const timeSinceMove = Date.now() - state.lastMouseTime;
+        if (timeSinceMove > 50) {
+            state.velocity = 0;
+        } else {
+            state.velocity = state.dragVelocity;
+        }
     };
 
     // Mouse
     stage.addEventListener('mousedown', e => handleStart(e.clientX));
     window.addEventListener('mousemove', e => handleMove(e.clientX));
     window.addEventListener('mouseup', handleEnd);
+    stage.addEventListener('mouseleave', handleEnd);
 
     // Touch
     stage.addEventListener('touchstart', e => handleStart(e.touches[0].clientX));
@@ -1168,17 +1708,28 @@ function initInteraction() {
 function animate() {
     requestAnimationFrame(animate);
 
-    if (!state.isDragging) {
+    // Update Cloud Shader Time (Simulates weather systems moving)
+    cloudMat.uniforms.uTime.value += 0.005;
+    
+    // Rotate Cloud sphere slightly faster for wind simulation
+    cloudMesh.rotation.y += 0.0003;
+
+    if (state.isDragging) {
+        // Snappy follow with slight smoothing
+        planetGroup.rotation.y += (state.targetRotation - planetGroup.rotation.y) * 0.3;
+    } else {
         if (state.autoRotate) {
-            state.velocity = 0.001; // Slower, majestic rotation
+            planetGroup.rotation.y += 0.001; 
         } else {
+            // Apply inertia
+            planetGroup.rotation.y += state.velocity;
+            
+            // Friction/Decay
             state.velocity *= 0.95;
-            if (Math.abs(state.velocity) < 0.0001) state.velocity = 0;
+            
+            // Stop if too slow
+            if (Math.abs(state.velocity) < 0.00001) state.velocity = 0;
         }
-        planetGroup.rotation.y += state.velocity;
-        
-        // Cloud Parallax (Local Rotation)
-        cloudMesh.rotation.y += 0.0003; 
     }
 
     renderer.render(scene, camera);
@@ -1239,6 +1790,7 @@ window.onload = () => {
 
     // Init
     initInteraction();
+    updateCamera();
     const initRng = createRNG(dom.seedInput.value);
     const initData = generatePlanetData(initRng);
     dom.rngWater.value = initData.suggestedWater;
